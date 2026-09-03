@@ -21,7 +21,10 @@ def _write(rows):
     STORE_PATH.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def save_prediction(prediction, fixture_date=None):
+def save_prediction(prediction, fixture_date):
+    """Persist only genuine pre-match predictions tied to a known future fixture."""
+    if not fixture_date:
+        return None
     now = datetime.now(timezone.utc)
     record = {
         "id": f"p-{int(now.timestamp()*1000)}",
@@ -39,19 +42,18 @@ def save_prediction(prediction, fixture_date=None):
         "over_2_5": prediction["over_2_5"],
         "btts_yes": prediction["btts_yes"],
         "api_version": prediction.get("api_version"),
+        "tracking_type": "pre_match",
     }
     with _lock:
         rows = _read()
-        # Keep one snapshot per exact fixture per model version when possible.
-        if fixture_date:
-            rows = [r for r in rows if not (
-                r.get("home_team") == record["home_team"] and
-                r.get("away_team") == record["away_team"] and
-                r.get("fixture_date") == fixture_date and
-                r.get("api_version") == record["api_version"]
-            )]
+        rows = [r for r in rows if not (
+            r.get("home_team") == record["home_team"] and
+            r.get("away_team") == record["away_team"] and
+            r.get("fixture_date") == fixture_date and
+            r.get("api_version") == record["api_version"]
+        )]
         rows.append(record)
-        _write(rows[-1000:])
+        _write(rows[-2000:])
     return record
 
 
@@ -63,3 +65,7 @@ def list_predictions(home_team=None, away_team=None, limit=20):
         rows = [r for r in rows if r.get("away_team") == away_team]
     rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
     return rows[:limit]
+
+
+def all_predictions():
+    return _read()

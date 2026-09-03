@@ -155,6 +155,31 @@ class FootballDataEngine:
         r = x.iloc[0]
         return {"date": r.match_date.date().isoformat(), "home_team": home_team, "away_team": away_team}
 
+
+    def fixture_context(self, home_team, away_team):
+        """Return upcoming fixture when available, otherwise the most recent completed
+        current-season meeting in the same home/away orientation.
+        """
+        self.refresh()
+        if self.current_schedule.empty:
+            return {"status": "not_found", "fixture": None, "actual": None}
+        x = self.current_schedule[(self.current_schedule.HomeTeam==home_team) & (self.current_schedule.AwayTeam==away_team)].copy()
+        if x.empty:
+            return {"status": "not_found", "fixture": None, "actual": None}
+        x = x.dropna(subset=["match_date"]).sort_values("match_date")
+        upcoming = x[x["FTHG"].isna() | x["FTAG"].isna()]
+        if not upcoming.empty:
+            r=upcoming.iloc[0]
+            fixture={"date":r.match_date.date().isoformat(),"home_team":home_team,"away_team":away_team}
+            return {"status":"upcoming","fixture":fixture,"actual":None}
+        completed = x.dropna(subset=["FTHG","FTAG"])
+        if completed.empty:
+            return {"status": "not_found", "fixture": None, "actual": None}
+        r=completed.iloc[-1]
+        fixture={"date":r.match_date.date().isoformat(),"home_team":home_team,"away_team":away_team}
+        actual={"date":fixture["date"],"home_goals":int(r.FTHG),"away_goals":int(r.FTAG),"score":f"{int(r.FTHG)}–{int(r.FTAG)}"}
+        return {"status":"completed","fixture":fixture,"actual":actual}
+
     def h2h_matches(self, team_a, team_b, limit=10):
         self.refresh()
         frames = [self.epl]
