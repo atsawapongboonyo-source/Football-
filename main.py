@@ -7,7 +7,7 @@ from predictor import FooballPredictor
 from prediction_store import save_prediction, list_predictions
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="Fooball", version="0.4.2")
+app = FastAPI(title="Fooball", version="0.4.2.1")
 predictor = FooballPredictor()
 
 class PredictRequest(BaseModel):
@@ -22,9 +22,9 @@ def home():
 def styles():
     return FileResponse(ROOT/"styles.css", media_type="text/css", headers={"Cache-Control":"no-cache"})
 
-@app.get("/app.js")
-def js():
-    return FileResponse(ROOT/"app.js", media_type="application/javascript", headers={"Cache-Control":"no-cache"})
+@app.get("/app-0421.js")
+def js_0421():
+    return FileResponse(ROOT/"app-0421.js", media_type="application/javascript", headers={"Cache-Control":"no-store, max-age=0"})
 
 @app.get("/manifest.webmanifest")
 def manifest():
@@ -36,7 +36,7 @@ def sw():
 
 @app.get("/health")
 def health():
-    return {"status":"ok","version":"0.4.2"}
+    return {"status":"ok","version":"0.4.2.1"}
 
 @app.get("/api/teams")
 def teams():

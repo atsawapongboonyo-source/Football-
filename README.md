@@ -1,3 +1,19 @@
+# Fooball v0.4.2.1 — Frontend Cache Hotfix
+
+Hotfix หลัง v0.4.2:
+- ใช้ไฟล์ JavaScript ชื่อใหม่ `app-0421.js` เพื่อเลี่ยง browser/service-worker cache ของ `app.js` รุ่นเก่า
+- แสดง `Frontend v0.4.2.1 พร้อมใช้งาน` ก่อนกดวิเคราะห์ เพื่อเช็กได้ทันทีว่า JS ใหม่ถูกโหลด
+- Advanced Match Stats แสดงข้อความชัดเจนเมื่อไม่มี metric แทนกล่องว่าง
+- ย้าย `ผลจากการวิเคราะห์` ให้อยู่ก่อน Advanced Stats / H2H / Prediction History
+- service worker ล้าง cache เก่าและไม่ cache HTML/JS/API
+- `/health` และ API version เป็น `0.4.2.1`
+
+## Deploy
+อัปโหลดไฟล์ทั้งหมดในโฟลเดอร์นี้ทับไฟล์เดิมที่ GitHub root แล้ว commit เช่น:
+`Hotfix Fooball v0.4.2.1 frontend cache`
+
+หลัง Render deploy สำเร็จ เปิด `/health` ต้องเห็น `0.4.2.1` และหน้าเว็บควรขึ้น `Frontend v0.4.2.1 พร้อมใช้งาน`.
+
 # Fooball v0.4.2 — Advanced Match Stats
 
 เพิ่มจาก v0.4.1:

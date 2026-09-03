@@ -290,7 +290,7 @@ class FooballPredictor:
         view=max(probs,key=lambda x:x[1])[0]
 
         return {
-            "api_version":"0.4.2",
+            "api_version":"0.4.2.1",
             "season":"2026/27",
             "home_team":home,"away_team":away,
             "home_win":home_win,"draw":draw,"away_win":away_win,
@@ -313,5 +313,5 @@ class FooballPredictor:
     def status(self):
         self._ensure_model()
         s=self.engine.status()
-        s.update({"api_version":"0.4.2","teams":len(self.current_teams)})
+        s.update({"api_version":"0.4.2.1","teams":len(self.current_teams)})
         return s
