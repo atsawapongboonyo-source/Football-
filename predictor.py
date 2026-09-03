@@ -56,6 +56,7 @@ class FooballPredictor:
         self.matches_loaded = 0
         self.current_matches_loaded = 0
         self.matches = pd.DataFrame()
+        self.champ_matches = pd.DataFrame()
 
     def _name(self, x):
         return FD_NAMES.get(str(x).strip(), str(x).strip())
@@ -165,6 +166,10 @@ class FooballPredictor:
             c = c.dropna(subset=["HomeTeam","AwayTeam","FTHG","FTAG"]).copy()
             c["HomeTeam"] = c["HomeTeam"].map(self._name)
             c["AwayTeam"] = c["AwayTeam"].map(self._name)
+            c["FTHG"] = pd.to_numeric(c["FTHG"], errors="coerce")
+            c["FTAG"] = pd.to_numeric(c["FTAG"], errors="coerce")
+            c = c.dropna(subset=["FTHG","FTAG"])
+            self.champ_matches = c.copy()
             league_home = c["FTHG"].mean()
             league_away = c["FTAG"].mean()
             league_strength = 0.82
@@ -214,120 +219,159 @@ class FooballPredictor:
         if self.matches.empty:
             return []
 
-        m = self.matches.copy()
+        epl = self.matches.copy()
 
-        def recent_home(team, n=18):
-            x = m[m.HomeTeam == team].tail(n)
+        def venue_stats(frame, team, venue, n=18):
+            if venue == "home":
+                x = frame[frame.HomeTeam == team].tail(n)
+                gf_col, ga_col = "FTHG", "FTAG"
+            else:
+                x = frame[frame.AwayTeam == team].tail(n)
+                gf_col, ga_col = "FTAG", "FTHG"
             if x.empty:
                 return None
-            wins = int((x.FTHG > x.FTAG).sum())
-            draws = int((x.FTHG == x.FTAG).sum())
-            losses = int((x.FTHG < x.FTAG).sum())
+            gf = x[gf_col].astype(float)
+            ga = x[ga_col].astype(float)
+            wins = int((gf > ga).sum())
+            draws = int((gf == ga).sum())
+            losses = int((gf < ga).sum())
             return {
                 "matches": len(x),
                 "wins": wins, "draws": draws, "losses": losses,
                 "win_rate": wins/len(x),
-                "gf": float(x.FTHG.mean()),
-                "ga": float(x.FTAG.mean()),
-                "over25": float(((x.FTHG+x.FTAG) >= 3).mean()),
-                "btts": float(((x.FTHG > 0) & (x.FTAG > 0)).mean()),
+                "gf": float(gf.mean()),
+                "ga": float(ga.mean()),
+                "scored_rate": float((gf > 0).mean()),
+                "clean_sheet": float((ga == 0).mean()),
+                "over25": float(((gf+ga) >= 3).mean()),
+                "btts": float(((gf > 0) & (ga > 0)).mean()),
             }
 
-        def recent_away(team, n=18):
-            x = m[m.AwayTeam == team].tail(n)
+        def last_form(frame, team, n=5):
+            x = frame[(frame.HomeTeam == team) | (frame.AwayTeam == team)].tail(n)
             if x.empty:
                 return None
-            wins = int((x.FTAG > x.FTHG).sum())
-            draws = int((x.FTAG == x.FTHG).sum())
-            losses = int((x.FTAG < x.FTHG).sum())
-            return {
-                "matches": len(x),
-                "wins": wins, "draws": draws, "losses": losses,
-                "win_rate": wins/len(x),
-                "gf": float(x.FTAG.mean()),
-                "ga": float(x.FTHG.mean()),
-                "over25": float(((x.FTHG+x.FTAG) >= 3).mean()),
-                "btts": float(((x.FTHG > 0) & (x.FTAG > 0)).mean()),
-            }
-
-        def last_form(team, n=5):
-            x = m[(m.HomeTeam == team) | (m.AwayTeam == team)].tail(n)
-            if x.empty:
-                return None
-            w=d=l=0
-            gf=ga=0
+            sequence, gf, ga = [], 0.0, 0.0
             for _, r in x.iterrows():
                 is_home = r.HomeTeam == team
-                tgf = r.FTHG if is_home else r.FTAG
-                tga = r.FTAG if is_home else r.FTHG
+                tgf = float(r.FTHG if is_home else r.FTAG)
+                tga = float(r.FTAG if is_home else r.FTHG)
                 gf += tgf; ga += tga
-                if tgf > tga: w += 1
-                elif tgf == tga: d += 1
-                else: l += 1
-            return {"matches":len(x),"wins":w,"draws":d,"losses":l,
-                    "gf":float(gf/len(x)),"ga":float(ga/len(x))}
+                sequence.append("W" if tgf > tga else "D" if tgf == tga else "L")
+            return {
+                "matches": len(x),
+                "sequence": sequence,
+                "wins": sequence.count("W"),
+                "draws": sequence.count("D"),
+                "losses": sequence.count("L"),
+                "gf": gf/len(x), "ga": ga/len(x)
+            }
 
         def h2h(a, b, n=5):
-            x = m[((m.HomeTeam == a)&(m.AwayTeam == b)) |
-                  ((m.HomeTeam == b)&(m.AwayTeam == a))].tail(n)
+            x = epl[((epl.HomeTeam == a)&(epl.AwayTeam == b)) |
+                    ((epl.HomeTeam == b)&(epl.AwayTeam == a))].tail(n)
             if x.empty:
                 return None
             aw=dw=bw=0
+            total_goals = 0.0
             for _, r in x.iterrows():
+                total_goals += float(r.FTHG + r.FTAG)
                 if r.FTHG == r.FTAG:
                     dw += 1
                 else:
                     winner = r.HomeTeam if r.FTHG > r.FTAG else r.AwayTeam
                     if winner == a: aw += 1
                     elif winner == b: bw += 1
-            return {"matches":len(x), "home_team_wins":aw,
-                    "draws":dw, "away_team_wins":bw}
+            return {
+                "matches":len(x), "home_team_wins":aw, "draws":dw,
+                "away_team_wins":bw, "avg_goals":total_goals/len(x)
+            }
 
-        hh = recent_home(home)
-        aa = recent_away(away)
-        hf = last_form(home)
-        af = last_form(away)
+        # EPL evidence first. For promoted clubs with too little EPL evidence,
+        # use their real 2025/26 Championship venue/form record and label it clearly.
+        home_frame, home_source = epl, "Premier League"
+        away_frame, away_source = epl, "Premier League"
+
+        epl_home_count = len(epl[epl.HomeTeam == home])
+        epl_away_count = len(epl[epl.AwayTeam == away])
+
+        if home in PROMOTED and epl_home_count < 5 and not self.champ_matches.empty:
+            home_frame, home_source = self.champ_matches, "Championship 2025/26"
+        if away in PROMOTED and epl_away_count < 5 and not self.champ_matches.empty:
+            away_frame, away_source = self.champ_matches, "Championship 2025/26"
+
+        hs = venue_stats(home_frame, home, "home")
+        av = venue_stats(away_frame, away, "away")
+        hf = last_form(home_frame, home)
+        af = last_form(away_frame, away)
         head = h2h(home, away)
 
         evidence = []
-        if hh:
+        if hs:
             evidence.append({
-                "title": f"ผลงานในบ้านของ {home}",
-                "text": f"ชนะ {hh['wins']} จาก {hh['matches']} นัด ({hh['win_rate']*100:.0f}%) · ยิงเฉลี่ย {hh['gf']:.2f} · เสียเฉลี่ย {hh['ga']:.2f} ประตู/นัด"
+                "title": f"สถิติในบ้านของ {home}",
+                "text": (
+                    f"{home_source} · {hs['matches']} นัดล่าสุด: ชนะ {hs['wins']} เสมอ {hs['draws']} แพ้ {hs['losses']} "
+                    f"· อัตราชนะ {hs['win_rate']*100:.0f}% · ยิงเฉลี่ย {hs['gf']:.2f} · เสียเฉลี่ย {hs['ga']:.2f} ประตู/นัด"
+                )
             })
             evidence.append({
-                "title": "แนวโน้มประตูของเจ้าบ้าน",
-                "text": f"สูง 2.5 เกิด {hh['over25']*100:.0f}% · ทั้งสองทีมยิงได้ {hh['btts']*100:.0f}% จาก {hh['matches']} เกมเหย้าล่าสุด"
+                "title": f"ประสิทธิภาพเกมรุก/รับของ {home}",
+                "text": (
+                    f"ยิงได้อย่างน้อย 1 ประตู {hs['scored_rate']*100:.0f}% · คลีนชีต {hs['clean_sheet']*100:.0f}% "
+                    f"· สูง 2.5 ประตู {hs['over25']*100:.0f}% · BTTS {hs['btts']*100:.0f}%"
+                )
             })
-        if aa:
+
+        if av:
             evidence.append({
-                "title": f"ผลงานเกมเยือนของ {away}",
-                "text": f"ชนะ {aa['wins']} จาก {aa['matches']} นัด ({aa['win_rate']*100:.0f}%) · ยิงเฉลี่ย {aa['gf']:.2f} · เสียเฉลี่ย {aa['ga']:.2f} ประตู/นัด"
+                "title": f"สถิติเกมเยือนของ {away}",
+                "text": (
+                    f"{away_source} · {av['matches']} นัดล่าสุด: ชนะ {av['wins']} เสมอ {av['draws']} แพ้ {av['losses']} "
+                    f"· อัตราชนะ {av['win_rate']*100:.0f}% · ยิงเฉลี่ย {av['gf']:.2f} · เสียเฉลี่ย {av['ga']:.2f} ประตู/นัด"
+                )
             })
             evidence.append({
-                "title": "แนวโน้มประตูของทีมเยือน",
-                "text": f"สูง 2.5 เกิด {aa['over25']*100:.0f}% · ทั้งสองทีมยิงได้ {aa['btts']*100:.0f}% จาก {aa['matches']} เกมเยือนล่าสุด"
+                "title": f"ประสิทธิภาพเกมรุก/รับของ {away}",
+                "text": (
+                    f"ยิงได้อย่างน้อย 1 ประตู {av['scored_rate']*100:.0f}% · คลีนชีต {av['clean_sheet']*100:.0f}% "
+                    f"· สูง 2.5 ประตู {av['over25']*100:.0f}% · BTTS {av['btts']*100:.0f}%"
+                )
             })
+
         if hf:
             evidence.append({
                 "title": f"ฟอร์ม {hf['matches']} นัดล่าสุดของ {home}",
-                "text": f"ชนะ {hf['wins']} · เสมอ {hf['draws']} · แพ้ {hf['losses']} · ยิงเฉลี่ย {hf['gf']:.2f} ประตู/นัด"
+                "text": f"{' – '.join(hf['sequence'])} · ยิงเฉลี่ย {hf['gf']:.2f} · เสียเฉลี่ย {hf['ga']:.2f} ประตู/นัด"
             })
         if af:
             evidence.append({
                 "title": f"ฟอร์ม {af['matches']} นัดล่าสุดของ {away}",
-                "text": f"ชนะ {af['wins']} · เสมอ {af['draws']} · แพ้ {af['losses']} · ยิงเฉลี่ย {af['gf']:.2f} ประตู/นัด"
+                "text": f"{' – '.join(af['sequence'])} · ยิงเฉลี่ย {af['gf']:.2f} · เสียเฉลี่ย {af['ga']:.2f} ประตู/นัด"
             })
+
         if head and head["matches"] >= 2:
             evidence.append({
-                "title": "สถิติการพบกันล่าสุด",
-                "text": f"{home} ชนะ {head['home_team_wins']} · เสมอ {head['draws']} · {away} ชนะ {head['away_team_wins']} จาก {head['matches']} นัด"
+                "title": "สถิติการพบกันย้อนหลัง",
+                "text": (
+                    f"{head['matches']} นัดล่าสุด: {home} ชนะ {head['home_team_wins']} · เสมอ {head['draws']} "
+                    f"· {away} ชนะ {head['away_team_wins']} · ประตูรวมเฉลี่ย {head['avg_goals']:.2f} ลูก/นัด"
+                )
             })
+        else:
+            evidence.append({
+                "title": "สถิติการพบกันย้อนหลัง",
+                "text": "ยังมีข้อมูลการพบกันโดยตรงไม่เพียงพอ จึงไม่ให้น้ำหนัก H2H มากเกินไป"
+            })
+
         if home in PROMOTED or away in PROMOTED:
             promoted = home if home in PROMOTED else away
             evidence.append({
-                "title": f"การปรับข้อมูลทีมน้องใหม่: {promoted}",
-                "text": "ใช้ผลงาน Championship 2025/26 เป็น prior และปรับระดับความแข็งแกร่งก่อนรวมกับผล Premier League 2026/27"
+                "title": f"การประเมินทีมน้องใหม่: {promoted}",
+                "text": (
+                    "ช่วงต้นฤดูกาลใช้ผลงาน Championship 2025/26 เป็น prior แล้วลดน้ำหนักลงเมื่อมีข้อมูล "
+                    "Premier League 2026/27 มากขึ้น เพื่อไม่ให้ทีมที่เพิ่งเลื่อนชั้นเสียเปรียบเพราะมีข้อมูล EPL น้อย"
+                )
             })
 
         return evidence

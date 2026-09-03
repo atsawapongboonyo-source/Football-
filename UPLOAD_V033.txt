@@ -1,0 +1,23 @@
+Fooball v0.3.3 patch
+
+Upload/replace these 4 files in the GitHub repository root:
+1. predictor.py
+2. app.js
+3. index.html
+4. styles.css
+
+Commit message:
+Update Fooball v0.3.3 statistical breakdown
+
+Render should auto-deploy after the commit.
+
+Changes:
+- Real home/away W-D-L statistical breakdown
+- Goals scored/conceded averages
+- Scored-at-least-once rate
+- Clean-sheet rate
+- Over 2.5 and BTTS history
+- Last-5 W/D/L form sequence
+- H2H with average total goals
+- Promoted clubs can use real Championship 2025/26 evidence when EPL sample is still small
+- Top-scoreline display fallback fixed
