@@ -253,6 +253,26 @@ class FooballPredictor:
             "coverage_note": "Football-Data ชุดปัจจุบันรองรับ Shots, Shots on Target, Corners, Fouls และ Cards ในหลายฤดูกาล; ยังไม่มี possession และตำแหน่งยิงระดับ event/shot-location แบบสม่ำเสมอ จึงยังไม่สร้างค่าปลอมให้โมเดล",
         }
 
+
+    @staticmethod
+    def _credible_goal_band(probs, target=0.68):
+        """Smallest contiguous goal interval containing at least target mass."""
+        probs = [float(x) for x in probs]
+        best = None
+        for lo in range(len(probs)):
+            total = 0.0
+            for hi in range(lo, len(probs)):
+                total += probs[hi]
+                if total >= target:
+                    cand = (hi-lo, -total, lo, hi, total)
+                    if best is None or cand < best:
+                        best = cand
+                    break
+        if best is None:
+            return {"low": 0, "high": len(probs)-1, "probability": sum(probs)}
+        _, _, lo, hi, total = best
+        return {"low": int(lo), "high": int(hi), "probability": float(total)}
+
     def predict(self, home, away):
         self._ensure_model()
         hr=self.rates.get(home,TeamRates()); ar=self.rates.get(away,TeamRates())
@@ -285,12 +305,17 @@ class FooballPredictor:
 
         flat=sorted([(float(mat[i,j]),i,j) for i in range(n+1) for j in range(n+1)],reverse=True)
         top=[{"score":f"{i}–{j}","probability":p} for p,i,j in flat[:3]]
+        home_goal_probs = mat.sum(axis=1).tolist()
+        away_goal_probs = mat.sum(axis=0).tolist()
+        home_band = self._credible_goal_band(home_goal_probs, .68)
+        away_band = self._credible_goal_band(away_goal_probs, .68)
+        top3_mass = float(sum(x["probability"] for x in top))
 
         probs=[(home,home_win),("เสมอ",draw),(away,away_win)]
         view=max(probs,key=lambda x:x[1])[0]
 
         return {
-            "api_version":"0.4.5",
+            "api_version":"0.4.6",
             "season":"2026/27",
             "home_team":home,"away_team":away,
             "home_win":home_win,"draw":draw,"away_win":away_win,
@@ -300,6 +325,12 @@ class FooballPredictor:
             "most_likely_score":top[0]["score"],
             "most_likely_score_prob":top[0]["probability"],
             "top_scorelines":top,
+            "score_distribution": {
+                "home_goal_band": home_band,
+                "away_goal_band": away_band,
+                "top3_probability_mass": top3_mass,
+                "note": "สกอร์อันดับ 1 คือสกอร์เดี่ยวที่มีโอกาสมากที่สุด ไม่ได้หมายความว่าโมเดลมั่นใจว่าสกอร์นั้นจะเกิด",
+            },
             "model_view": "เกมมีแนวโน้มสูสี" if view=="เสมอ" else f"{view} ได้เปรียบ",
             "home_elo":round(self.elo.get(home,1500),1),
             "away_elo":round(self.elo.get(away,1500),1),
@@ -313,5 +344,5 @@ class FooballPredictor:
     def status(self):
         self._ensure_model()
         s=self.engine.status()
-        s.update({"api_version":"0.4.5","teams":len(self.current_teams)})
+        s.update({"api_version":"0.4.6","teams":len(self.current_teams)})
         return s

@@ -38,3 +38,16 @@ button{width:100%;border:0;border-radius:22px;padding:21px;background:var(--lime
 .adv-row span{font-size:14px;color:#aeb7bc}.adv-row strong{text-align:right;font-size:16px;color:#f3f6f7}
 .adv-source{padding-top:14px;font-size:12px;color:#7d898f;line-height:1.5}
 @media(max-width:420px){.adv-head,.adv-row{grid-template-columns:1.35fr .85fr .85fr;gap:7px}.adv-row span{font-size:13px}.adv-row strong{font-size:15px}}
+
+
+/* v0.4.6 prediction clarity */
+.score-range span{font-size:clamp(28px,8vw,48px);letter-spacing:-1px;white-space:nowrap}
+.score-range small{max-width:180px;line-height:1.35}
+.fixture-board{margin-top:22px}
+.fixture-list{display:grid;gap:10px;margin-top:16px}
+.fixture-chip{width:100%;text-align:left;background:#0b1419;border:1px solid #2b3941;border-radius:16px;padding:14px 16px;color:#f3f6f8}
+.fixture-chip small{display:block;color:#8e9aa2;margin-bottom:5px}
+.fixture-chip strong{font-size:15px;line-height:1.35}
+.fixture-chip strong span{color:#7f8b92;font-weight:500;margin:0 4px}
+.fixture-chip:active{transform:scale(.99)}
+@media(min-width:700px){.fixture-list{grid-template-columns:1fr 1fr}}

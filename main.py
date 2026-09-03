@@ -8,7 +8,7 @@ from fixture_engine import FixtureEngine
 from prediction_store import save_prediction, list_predictions, all_predictions
 
 ROOT = Path(__file__).resolve().parent
-VERSION = "0.4.5"
+VERSION = "0.4.6"
 app = FastAPI(title="Fooball", version=VERSION)
 predictor = FooballPredictor()
 fixture_engine = FixtureEngine()
@@ -45,7 +45,7 @@ def health():
         "status": "ok",
         "version": VERSION,
         "frontend_expected": VERSION,
-        "deployment_marker": "fixture-engine-045",
+        "deployment_marker": "prediction-clarity-046",
     }
 
 
@@ -54,7 +54,7 @@ def api_version():
     return {
         "backend": VERSION,
         "frontend_expected": VERSION,
-        "deployment_marker": "fixture-engine-045",
+        "deployment_marker": "prediction-clarity-046",
         "javascript_mode": "inline",
     }
 

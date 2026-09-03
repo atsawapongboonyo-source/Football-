@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#0b1115">
 <title>Fooball — Match Intelligence</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=045">
+<link rel="stylesheet" href="/styles.css?v=046">
 </head>
 <body>
 <main class="wrap">
 <header>
   <div><div class="brand">FOOBALL<span>.</span></div><div class="subbrand">MATCH INTELLIGENCE</div></div>
-  <div class="beta">V0.4.4</div>
+  <div class="beta">V0.4.6</div>
 </header>
 
 <section class="hero">
@@ -29,6 +29,12 @@
 <div id="status" class="status"></div>
 </section>
 
+<section class="card fixture-board">
+  <h2>โปรแกรมพรีเมียร์ลีกถัดไป</h2>
+  <div class="section-note">กดคู่แข่งขันเพื่อใส่ทีมลงในช่องวิเคราะห์อัตโนมัติ · ใช้เพื่อตรวจว่า Fixture Engine มองเห็นโปรแกรมจริง</div>
+  <div id="upcomingFixtures" class="fixture-list"><div class="empty-note">กำลังโหลดโปรแกรม…</div></div>
+</section>
+
 <section id="results" class="results hidden">
   <div class="summary card">
     <span class="summary-label">มุมมองของโมเดล</span>
@@ -38,7 +44,7 @@
 
   <div class="matchline">
     <div><b id="homeName"></b><small>เจ้าบ้าน</small></div>
-    <div class="score"><span id="scorePick">–</span><small id="scoreProb"></small></div>
+    <div class="score score-range"><span id="goalRange">–</span><small id="scoreProb"></small></div>
     <div><b id="awayName"></b><small>ทีมเยือน</small></div>
   </div>
 
@@ -56,7 +62,7 @@
     <div class="metric"><span>ทั้งสองทีมยิงได้</span><b id="btts"></b><small>BTTS — Yes</small></div>
   </div>
 
-  <div class="card"><h2>สกอร์ที่มีโอกาสมากที่สุด</h2><div id="topScores" class="top-scores"></div></div>
+  <div class="card"><h2>สกอร์ที่เป็นไปได้สูง</h2><div class="section-note">สกอร์อันดับ 1 เป็นเพียงสกอร์เดี่ยวที่มีโอกาสสูงสุด ไม่ใช่คำยืนยันว่าผลจะจบแบบนั้น</div><div id="topScores" class="top-scores"></div><div id="scoreDistributionNote" class="fine"></div></div>
 
   <div class="card">
     <h2>ผลจากการวิเคราะห์</h2>
@@ -92,12 +98,12 @@
   </div>
 
 </section>
-<footer>Fooball v0.4.5 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
+<footer>Fooball v0.4.6 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 const pct=v=>`${(Number(v)*100).toFixed(1)}%`;
-const VERSION='0.4.5';
+const VERSION='0.4.6';
 
 function fmtDate(s){
   if(!s) return 'ไม่พบวันแข่งขันในแหล่งข้อมูล';
@@ -129,7 +135,7 @@ async function init(){
   await clearLegacyCaches();
   if($('status')) $('status').textContent=`Frontend v${VERSION} · กำลังตรวจ Backend…`;
   try{
-    const vr=await fetch('/api/version?v=045',{cache:'no-store'});
+    const vr=await fetch('/api/version?v=046',{cache:'no-store'});
     const vd=await vr.json();
     if(vd.backend!==VERSION){
       $('status').textContent=`เวอร์ชันไม่ตรง: Frontend ${VERSION} / Backend ${vd.backend||'unknown'}`;
@@ -140,16 +146,41 @@ async function init(){
     $('status').textContent=`Frontend v${VERSION} · ตรวจ Backend ไม่สำเร็จ`;
   }
   try{
-    const r=await fetch('/api/teams?v=045',{cache:'no-store'}); const d=await r.json();
+    const r=await fetch('/api/teams?v=046',{cache:'no-store'}); const d=await r.json();
     $('homeTeam').innerHTML=''; $('awayTeam').innerHTML='';
     d.teams.forEach(t=>{$('homeTeam').add(new Option(t,t));$('awayTeam').add(new Option(t,t));});
     $('homeTeam').value='Arsenal'; $('awayTeam').value='Coventry City';
+    await loadUpcomingFixtures();
   }catch(e){$('status').textContent='โหลดรายชื่อทีมไม่สำเร็จ';}
 }
 
 
 function statValue(v, suffix=''){
   return (v===null || v===undefined || Number.isNaN(Number(v))) ? '—' : `${Number(v).toFixed(2)}${suffix}`;
+}
+
+async function loadUpcomingFixtures(){
+  const box=$('upcomingFixtures'); if(!box) return;
+  try{
+    const r=await fetch('/api/upcoming-fixtures?days=10&v=046',{cache:'no-store'});
+    const d=await r.json(); box.innerHTML='';
+    if(!d.fixtures?.length){box.innerHTML='<div class="empty-note">Fixture Engine ยังไม่พบโปรแกรม 10 วันข้างหน้า</div>';return;}
+    d.fixtures.slice(0,12).forEach(f=>{
+      const b=document.createElement('button'); b.type='button'; b.className='fixture-chip';
+      b.innerHTML=`<small>${fmtKickoff(f.kickoff_utc)||fmtDate(f.date)}</small><strong>${f.home_team} <span>vs</span> ${f.away_team}</strong>`;
+      b.addEventListener('click',()=>{
+        $('homeTeam').value=f.home_team; $('awayTeam').value=f.away_team;
+        $('status').textContent=`เลือก ${f.home_team} vs ${f.away_team} แล้ว`;
+        window.scrollTo({top:document.querySelector('.panel').offsetTop-20,behavior:'smooth'});
+      });
+      box.appendChild(b);
+    });
+  }catch(e){box.innerHTML='<div class="empty-note">โหลดโปรแกรมการแข่งขันไม่สำเร็จ</div>';}
+}
+
+function bandText(b){
+  if(!b) return '—';
+  return b.low===b.high ? `${b.low}` : `${b.low}–${b.high}`;
 }
 
 function renderAdvancedStats(data){
@@ -209,7 +240,7 @@ async function renderPredictionHistory(home,away){
 async function renderModelPerformance(){
   const box=$('modelPerformance'); if(!box) return;
   try{
-    const r=await fetch('/api/model-performance?v=045',{cache:'no-store'}); const d=await r.json();
+    const r=await fetch('/api/model-performance?v=046',{cache:'no-store'}); const d=await r.json();
     if(!d.resolved_predictions){
       box.innerHTML=`<div class="empty-note">${d.note||'ยังไม่มีผลจริงสำหรับวัดความแม่นยำ'}<br>รอผล: ${d.pending_predictions||0} รายการ</div>`; return;
     }
@@ -238,17 +269,21 @@ $('analyzeBtn').addEventListener('click',async()=>{
   if(home===away){$('status').textContent='กรุณาเลือกคนละทีม';return;}
   $('analyzeBtn').disabled=true; $('status').textContent='กำลังอัปเดตข้อมูลและคำนวณ…';
   try{
-    const r=await fetch('/api/predict?v=045',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_team:home,away_team:away}),cache:'no-store'});
+    const r=await fetch('/api/predict?v=046',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_team:home,away_team:away}),cache:'no-store'});
     const d=await r.json(); if(!r.ok) throw new Error(d.detail||'เกิดข้อผิดพลาด');
     $('modelView').textContent=d.model_view;
     $('summaryLine').textContent=`เจ้าบ้านชนะ ${pct(d.home_win)} · ประตูรวมคาดการณ์ ${Number(d.expected_total_goals).toFixed(2)} · สูง 2.5 ${pct(d.over_2_5)}`;
-    $('homeName').textContent=home; $('awayName').textContent=away; $('scorePick').textContent=d.most_likely_score; $('scoreProb').textContent=`โอกาส ${pct(d.most_likely_score_prob)}`;
+    $('homeName').textContent=home; $('awayName').textContent=away;
+    const dist=d.score_distribution||{};
+    $('goalRange').textContent=`${bandText(dist.home_goal_band)} | ${bandText(dist.away_goal_band)}`;
+    $('scoreProb').textContent=`ช่วงประตูคาด · สกอร์เด่น ${d.most_likely_score} (${pct(d.most_likely_score_prob)})`;
     $('homeWin').textContent=pct(d.home_win); $('draw').textContent=pct(d.draw); $('awayWin').textContent=pct(d.away_win);
     $('homeBar').style.width=pct(d.home_win); $('drawBar').style.width=pct(d.draw); $('awayBar').style.width=pct(d.away_win);
     $('xg').textContent=`${Number(d.expected_home_goals).toFixed(2)} – ${Number(d.expected_away_goals).toFixed(2)}`;
     $('over25').textContent=pct(d.over_2_5); $('under25').textContent=pct(d.under_2_5); $('btts').textContent=pct(d.btts_yes);
     renderAdvancedStats(d.advanced_stats); renderFixtureContext(d);
     $('topScores').innerHTML=''; (d.top_scorelines||[]).forEach((s,i)=>{const row=document.createElement('div');row.className='score-row';row.innerHTML=`<span class="score-rank">${i+1}</span><strong>${s.score}</strong><span>${pct(s.probability)}</span>`;$('topScores').appendChild(row);});
+    if($('scoreDistributionNote')) $('scoreDistributionNote').textContent=`3 สกอร์แรกมีความน่าจะเป็นรวม ${pct((d.score_distribution||{}).top3_probability_mass||0)} · จึงควรอ่านร่วมกับ 1X2 และช่วงประตู ไม่ควรยึดสกอร์เดียว`;
     $('evidence').innerHTML=''; (d.statistical_evidence||[]).forEach(item=>{const box=document.createElement('div');box.className='evidence-item';box.innerHTML=`<strong></strong><span></span>`;box.querySelector('strong').textContent=item.title;box.querySelector('span').textContent=item.text;$('evidence').appendChild(box);});
     $('reasons').innerHTML=`<li>Elo: ${home} ${d.home_elo} · ${away} ${d.away_elo}</li><li>ให้น้ำหนักฤดูกาลล่าสุดมากกว่าข้อมูลเก่า และไม่ใช้ราคาต่อรองเป็น input หลัก</li>`;
     $('modelNote').textContent='ประตูคาดการณ์เป็นค่าจากโมเดล ไม่ใช่ shot-location xG';
