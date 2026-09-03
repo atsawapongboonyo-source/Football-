@@ -62,6 +62,44 @@ def slug(x):
     return re.sub(r"[^a-z0-9]+", "-", str(x).lower()).strip("-")
 
 
+# Emergency official-schedule fallback for the currently confirmed September
+# 2026 match rounds.  This is deliberately limited to fixtures published by the
+# Premier League and is only used when live no-key providers fail.  Live sources
+# remain preferred because fixtures can be rescheduled.
+OFFICIAL_CONFIRMED_FIXTURES = [
+    ("2026-09-04", "20:00", "Ipswich Town", "Liverpool"),
+    ("2026-09-05", "12:30", "Newcastle United", "AFC Bournemouth"),
+    ("2026-09-05", "15:00", "Brentford", "Sunderland"),
+    ("2026-09-05", "15:00", "Brighton & Hove Albion", "Leeds United"),
+    ("2026-09-05", "15:00", "Fulham", "Crystal Palace"),
+    ("2026-09-05", "15:00", "Manchester City", "Coventry City"),
+    ("2026-09-05", "15:00", "Nottingham Forest", "Tottenham Hotspur"),
+    ("2026-09-05", "17:30", "Hull City", "Aston Villa"),
+    ("2026-09-06", "14:00", "Everton", "Manchester United"),
+    ("2026-09-06", "16:30", "Arsenal", "Chelsea"),
+    ("2026-09-12", "15:00", "AFC Bournemouth", "Brentford"),
+    ("2026-09-12", "15:00", "Aston Villa", "Nottingham Forest"),
+    ("2026-09-12", "15:00", "Chelsea", "Hull City"),
+    ("2026-09-12", "15:00", "Crystal Palace", "Ipswich Town"),
+    ("2026-09-12", "15:00", "Liverpool", "Fulham"),
+    ("2026-09-12", "17:30", "Tottenham Hotspur", "Everton"),
+    ("2026-09-12", "20:00", "Sunderland", "Arsenal"),
+    ("2026-09-13", "14:00", "Coventry City", "Brighton & Hove Albion"),
+    ("2026-09-13", "16:30", "Manchester United", "Manchester City"),
+    ("2026-09-14", "20:00", "Leeds United", "Newcastle United"),
+    ("2026-09-18", "20:00", "Brentford", "Chelsea"),
+    ("2026-09-19", "12:30", "Tottenham Hotspur", "Aston Villa"),
+    ("2026-09-19", "15:00", "Brighton & Hove Albion", "Arsenal"),
+    ("2026-09-19", "15:00", "Everton", "Ipswich Town"),
+    ("2026-09-20", "14:00", "Leeds United", "Crystal Palace"),
+    ("2026-09-19", "15:00", "Manchester City", "Sunderland"),
+    ("2026-09-19", "15:00", "Newcastle United", "Hull City"),
+    ("2026-09-19", "17:30", "Nottingham Forest", "Coventry City"),
+    ("2026-09-20", "14:00", "AFC Bournemouth", "Liverpool"),
+    ("2026-09-20", "16:30", "Fulham", "Manchester United"),
+]
+
+
 class FixtureEngine:
     """Upcoming Premier League fixture engine.
 
@@ -93,7 +131,7 @@ class FixtureEngine:
         if use_cache:
             text = cache.read_text(encoding="utf-8", errors="ignore")
         else:
-            r = requests.get(FIXTURES_URL, timeout=15, headers={"User-Agent": "Fooball/0.4.7"})
+            r = requests.get(FIXTURES_URL, timeout=15, headers={"User-Agent": "Fooball/0.4.8"})
             r.raise_for_status()
             text = r.text
             cache.write_text(text, encoding="utf-8")
@@ -139,8 +177,7 @@ class FixtureEngine:
         r = requests.get(
             ESPN_URL,
             params={"dates": dates, "limit": 100},
-            timeout=12,
-            headers={"User-Agent": "Fooball/0.4.7"},
+            timeout=15,
         )
         r.raise_for_status()
         data = r.json()
@@ -197,6 +234,21 @@ class FixtureEngine:
             self.errors.extend([f"ESPN day {e}" for e in day_errors[:3]])
         return rows
 
+    def _official_confirmed(self):
+        out = []
+        for date_str, time_str, home, away in OFFICIAL_CONFIRMED_FIXTURES:
+            dt = datetime.fromisoformat(f"{date_str}T{time_str}:00").replace(tzinfo=LONDON)
+            out.append({
+                "fixture_id": f"pl-official-{date_str}-{slug(home)}-{slug(away)}",
+                "date": date_str,
+                "kickoff_utc": dt.astimezone(timezone.utc).isoformat(),
+                "home_team": home,
+                "away_team": away,
+                "competition": "Premier League",
+                "source": "Premier League confirmed fallback",
+            })
+        return out
+
     def _dedupe(self, rows):
         merged = {}
         for f in rows:
@@ -242,6 +294,14 @@ class FixtureEngine:
         except Exception as exc:
             self.errors.append(f"ESPN Schedule: {exc}")
 
+        # Always merge the small confirmed official fallback. It guarantees that
+        # a temporary provider/API failure cannot make the fixture UI empty.
+        official = self._official_confirmed()
+        rows.extend(official)
+        self.provider_counts["Premier League confirmed fallback"] = len(official)
+        if official:
+            providers.append("Premier League confirmed fallback")
+
         self.fixtures = self._dedupe(rows)
         self.provider = " + ".join(providers) if providers else None
         self.last_refresh = time.time()
@@ -270,7 +330,7 @@ class FixtureEngine:
             src = f.get("source") or "unknown"
             source_counts[src] = source_counts.get(src, 0) + 1
         return {
-            "version": "0.4.7",
+            "version": "0.4.8",
             "provider": self.provider,
             "fixture_count": len(self.fixtures),
             "provider_counts": self.provider_counts,

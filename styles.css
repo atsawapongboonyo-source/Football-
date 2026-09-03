@@ -40,7 +40,7 @@ button{width:100%;border:0;border-radius:22px;padding:21px;background:var(--lime
 @media(max-width:420px){.adv-head,.adv-row{grid-template-columns:1.35fr .85fr .85fr;gap:7px}.adv-row span{font-size:13px}.adv-row strong{font-size:15px}}
 
 
-/* v0.4.7 fixture probability fix */
+/* v0.4.8 fixture probability fix */
 .score-range span{font-size:clamp(28px,8vw,48px);letter-spacing:-1px;white-space:nowrap}
 .score-range small{max-width:180px;line-height:1.35}
 .fixture-board{margin-top:22px}
