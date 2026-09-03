@@ -1,0 +1,6 @@
+MATCH_COLUMNS = [
+    "date", "season", "competition", "home_team", "away_team",
+    "home_goals", "away_goals", "home_xg", "away_xg",
+    "home_shots", "away_shots", "home_sot", "away_sot",
+    "home_odds", "draw_odds", "away_odds",
+]
