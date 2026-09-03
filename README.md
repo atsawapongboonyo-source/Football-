@@ -1,19 +1,26 @@
-# Fooball v0.2.1 — Render Ready (flat repository)
+# Fooball v0.3 — Render Ready
 
-This build is intentionally **flat** so it can be uploaded from a phone to the root of a GitHub repository without losing folder structure.
+Real-data milestone for Premier League 2026/27.
 
-## Render settings
-- Language: Python 3
-- Root Directory: leave blank
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- Environment Variables: none required for this demo build
+## What changed
+- Official 2026/27 team roster, including Coventry City, Hull City and Ipswich Town.
+- Removed relegated Burnley, West Ham United and Wolverhampton Wanderers.
+- Loads EPL match results from Football-Data.co.uk, from 2016/17 through 2026/27.
+- Recency weighting.
+- Poisson score matrix with Dixon-Coles-style low-score correction.
+- Elo adjustment.
+- 2025/26 Championship prior for promoted clubs with league-strength adjustment.
+- Bookmaker odds are not model inputs.
+- Mobile-first UI with working Analyze button.
 
-## Important
-The current prediction model uses deterministic synthetic demo data only. It is for validating the web/PWA/API deployment, not for real football forecasting or betting decisions.
+## Render
+Build:
+`pip install -r requirements.txt`
 
-## After deployment
-- `/` — mobile web app
-- `/health` — health check
-- `/api/teams` — team list
-- `/api/predict` — prediction endpoint
+Start:
+`uvicorn main:app --host 0.0.0.0 --port $PORT`
+
+Root Directory: blank
+
+## Note
+First prediction after a cold start may take longer because historical CSV files are downloaded and cached in memory.
