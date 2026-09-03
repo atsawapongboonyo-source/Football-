@@ -27,3 +27,5 @@ button{width:100%;border:0;border-radius:22px;padding:21px;background:var(--lime
 .evidence-item strong{display:block;font-size:15px;margin-bottom:5px;color:#f0f3f4}
 .evidence-item span{display:block;color:#aab4b9;font-size:14px;line-height:1.55}
 .model-detail-title{margin-top:22px;padding-top:18px;border-top:1px solid #273138;color:#78868d;font-size:12px;text-transform:uppercase;letter-spacing:1px}
+
+.hero h1{margin-bottom:10px}.hero p{margin-top:0}.hero{padding-top:28px;padding-bottom:28px}

@@ -1,26 +1,18 @@
-# Fooball v0.3 — Render Ready
+# Fooball v0.4 — Real Data Engine
 
-Real-data milestone for Premier League 2026/27.
+Highlights:
+- Premier League results from 2016/17 through 2026/27 via Football-Data.co.uk
+- Hourly local cache on Render
+- Recency weighting
+- Home/away attack and defence rates
+- Elo
+- Poisson + Dixon-Coles low-score adjustment
+- Championship 2025/26 prior for promoted teams
+- Dynamic statistical evidence
+- Top 3 scorelines
+- Backtest script for a first measurable baseline
 
-## What changed
-- Official 2026/27 team roster, including Coventry City, Hull City and Ipswich Town.
-- Removed relegated Burnley, West Ham United and Wolverhampton Wanderers.
-- Loads EPL match results from Football-Data.co.uk, from 2016/17 through 2026/27.
-- Recency weighting.
-- Poisson score matrix with Dixon-Coles-style low-score correction.
-- Elo adjustment.
-- 2025/26 Championship prior for promoted clubs with league-strength adjustment.
-- Bookmaker odds are not model inputs.
-- Mobile-first UI with working Analyze button.
+Upload ALL files in this zip to GitHub root and replace same-named files.
+Keep old unused source files if you want; they will not be imported by v0.4.
 
-## Render
-Build:
-`pip install -r requirements.txt`
-
-Start:
-`uvicorn main:app --host 0.0.0.0 --port $PORT`
-
-Root Directory: blank
-
-## Note
-First prediction after a cold start may take longer because historical CSV files are downloaded and cached in memory.
+Commit: Upgrade Fooball v0.4 real data engine
