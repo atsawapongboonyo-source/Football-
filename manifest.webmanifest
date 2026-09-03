@@ -1,0 +1,8 @@
+{
+  "name": "Fooball Match Intelligence",
+  "short_name": "Fooball",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071015",
+  "theme_color": "#071015"
+}
