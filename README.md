@@ -1,20 +1,22 @@
-# Fooball v0.4.2.2 — Stable app.js Hotfix
+# Fooball v0.4.3 — Inline Frontend Deployment Fix
 
-Hotfix นี้แก้ปัญหา `app-0421.js` ขึ้น Internal Server Error บน Render โดยกลับมาใช้ชื่อไฟล์ JavaScript มาตรฐาน `app.js` ที่ root และใช้ query-string cache busting แทน
+รุ่นนี้แก้ปัญหา Browser/Service Worker โหลด `app.js` เก่า (เช่น Frontend v0.3.4) แม้ HTML/Backend จะเป็นรุ่นใหม่
 
-สิ่งที่แก้:
-- JavaScript หลักเป็น `/app.js?v=0422`
-- `main.py` มี route `/app.js` ที่ส่งไฟล์ `app.js` โดยตรง
-- ปิด cache ของ JavaScript ด้วย `Cache-Control: no-store`
-- Frontend/API/health version เป็น `0.4.2.2`
-- service worker cache key เป็น `fooball-v0422` และยังบังคับ network สำหรับ HTML/JS/API
-- Advanced Stats, H2H history และ Prediction vs Actual ยังอยู่ครบ
+## สิ่งที่เปลี่ยน
+- JavaScript หลักถูกฝังไว้ใน `index.html` โดยตรง จึงไม่พึ่งไฟล์ JS ภายนอกในการเริ่มระบบ
+- หน้าเว็บจะล้าง Cache Storage และ unregister Service Worker เก่าเมื่อเปิดหน้า
+- เพิ่ม `/api/version` สำหรับตรวจว่า Frontend และ Backend เป็นเวอร์ชันเดียวกัน
+- `/health` แสดง deployment marker `inline-frontend-043`
+- Advanced Stats, H2H และ Prediction vs Actual ยังคงอยู่ครบ
+- `app.js` ยังแนบไว้เพื่อ debug แต่หน้าเว็บไม่ต้องใช้ไฟล์นี้
 
-## วิธี deploy
-1. แตก ZIP แล้วอัปโหลดไฟล์ **ทั้งหมด** ไปที่ GitHub root โดยให้แทนที่ไฟล์เดิม
-2. ตรวจให้เห็นไฟล์ `app.js` อยู่ระดับเดียวกับ `main.py` และ `index.html`
-3. Commit เช่น `Hotfix Fooball v0.4.2.2 stable app js`
-4. รอ Render Auto-Deploy
-5. ทดสอบ `/health` ต้องเห็น `0.4.2.2`
-6. เปิด `/app.js?v=0422` ต้องเห็นโค้ด JavaScript ไม่ใช่ Internal Server Error
-7. หน้าเว็บต้องแสดง `Frontend v0.4.2.2 พร้อมใช้งาน` และ dropdown รายชื่อทีมต้องกลับมา
+## หลัง Deploy ควรเห็น
+- Badge: `V0.4.3`
+- ใต้ปุ่ม: `Frontend v0.4.3 · Backend v0.4.3 พร้อมใช้งาน`
+- Dropdown มีทีมครบ
+- `/health` => version 0.4.3
+- `/api/version` => backend/frontend_expected 0.4.3, javascript_mode inline
+
+## Upload
+อัปไฟล์ทั้งหมดในโฟลเดอร์นี้ไป GitHub root แล้ว commit เช่น:
+`Upgrade Fooball v0.4.3 inline frontend`

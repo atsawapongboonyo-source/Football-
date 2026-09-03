@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#0b1115">
 <title>Fooball — Match Intelligence</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=0422">
+<link rel="stylesheet" href="/styles.css?v=043">
 </head>
 <body>
 <main class="wrap">
 <header>
   <div><div class="brand">FOOBALL<span>.</span></div><div class="subbrand">MATCH INTELLIGENCE</div></div>
-  <div class="beta">V0.4.2.2</div>
+  <div class="beta">V0.4.3</div>
 </header>
 
 <section class="hero">
@@ -86,7 +86,136 @@
   </div>
 
 </section>
-<footer>Fooball v0.4.2.2 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
+<footer>Fooball v0.4.3 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
 </main>
-<script src="/app.js?v=0422"></script>
+<script>
+const $=id=>document.getElementById(id);
+const pct=v=>`${(Number(v)*100).toFixed(1)}%`;
+const VERSION='0.4.3';
+
+function fmtDate(s){
+  if(!s) return 'ไม่พบวันแข่งขันในแหล่งข้อมูล';
+  try{return new Intl.DateTimeFormat('th-TH',{dateStyle:'medium'}).format(new Date(`${s}T12:00:00`));}catch{return s;}
+}
+
+async function clearLegacyCaches(){
+  try{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+    if('caches' in window){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+  }catch(e){}
+}
+
+async function init(){
+  await clearLegacyCaches();
+  if($('status')) $('status').textContent=`Frontend v${VERSION} · กำลังตรวจ Backend…`;
+  try{
+    const vr=await fetch('/api/version?v=043',{cache:'no-store'});
+    const vd=await vr.json();
+    if(vd.backend!==VERSION){
+      $('status').textContent=`เวอร์ชันไม่ตรง: Frontend ${VERSION} / Backend ${vd.backend||'unknown'}`;
+      return;
+    }
+    $('status').textContent=`Frontend v${VERSION} · Backend v${vd.backend} พร้อมใช้งาน`;
+  }catch(e){
+    $('status').textContent=`Frontend v${VERSION} · ตรวจ Backend ไม่สำเร็จ`;
+  }
+  try{
+    const r=await fetch('/api/teams?v=043',{cache:'no-store'}); const d=await r.json();
+    $('homeTeam').innerHTML=''; $('awayTeam').innerHTML='';
+    d.teams.forEach(t=>{$('homeTeam').add(new Option(t,t));$('awayTeam').add(new Option(t,t));});
+    $('homeTeam').value='Arsenal'; $('awayTeam').value='Coventry City';
+  }catch(e){$('status').textContent='โหลดรายชื่อทีมไม่สำเร็จ';}
+}
+
+
+function statValue(v, suffix=''){
+  return (v===null || v===undefined || Number.isNaN(Number(v))) ? '—' : `${Number(v).toFixed(2)}${suffix}`;
+}
+
+function renderAdvancedStats(data){
+  const box=$('advancedStats');
+  if(!box) return;
+  box.innerHTML='';
+  if(!data?.home || !data?.away){box.innerHTML='<div class="empty-note">ยังไม่มีข้อมูลเชิงลึกเพียงพอ</div>';return;}
+  const metrics=[
+    ['shots','ยิงทั้งหมด/เกม',''],['sot','ยิงตรงกรอบ/เกม',''],['shot_accuracy','ความแม่นยำการยิง','%'],
+    ['goal_conversion','อัตราเปลี่ยนเป็นประตู','%'],['corners','เตะมุม/เกม',''],['fouls','ฟาวล์/เกม',''],
+    ['yellow','ใบเหลือง/เกม',''],['red','ใบแดง/เกม','']
+  ];
+  const head=document.createElement('div'); head.className='adv-head';
+  head.innerHTML=`<span>สถิติ</span><b>${data.home.team}</b><b>${data.away.team}</b>`; box.appendChild(head);
+  let rendered=0;
+  metrics.forEach(([key,label,suffix])=>{
+    const h=data.home[key], a=data.away[key];
+    if((h===null||h===undefined)&&(a===null||a===undefined)) return;
+    const row=document.createElement('div'); row.className='adv-row';
+    const hv=suffix==='%'&&h!=null?`${(Number(h)*100).toFixed(1)}%`:statValue(h);
+    const av=suffix==='%'&&a!=null?`${(Number(a)*100).toFixed(1)}%`:statValue(a);
+    row.innerHTML=`<span>${label}</span><strong>${hv}</strong><strong>${av}</strong>`; box.appendChild(row); rendered++;
+  });
+  if(!rendered){box.innerHTML='<div class="empty-note">แหล่งข้อมูลของคู่นี้ยังไม่มีสถิติเชิงลึกที่ใช้ได้</div>'; if($('advancedCoverage')) $('advancedCoverage').textContent=data.coverage_note||''; return;}
+  const source=document.createElement('div'); source.className='adv-source';
+  source.textContent=`${data.home.source} (${data.home.matches} นัด) · ${data.away.source} (${data.away.matches} นัด)`; box.appendChild(source);
+  if($('advancedCoverage')) $('advancedCoverage').textContent=data.coverage_note||'';
+}
+
+function renderH2H(matches){
+  const box=$('h2hList'); box.innerHTML='';
+  if(!matches || !matches.length){box.innerHTML='<div class="empty-note">ยังไม่มีสกอร์ย้อนหลังที่ตรงกันในฐานข้อมูล</div>';return;}
+  matches.forEach(m=>{
+    const row=document.createElement('div'); row.className='history-row';
+    row.innerHTML=`<div><small>${fmtDate(m.date)} · ${m.league||''}</small><strong>${m.home_team} ${m.home_goals}–${m.away_goals} ${m.away_team}</strong></div>`;
+    box.appendChild(row);
+  });
+}
+
+async function renderPredictionHistory(home,away){
+  const box=$('predictionHistory'); box.innerHTML='<div class="empty-note">กำลังตรวจผลย้อนหลัง…</div>';
+  try{
+    const r=await fetch(`/api/prediction-history?home_team=${encodeURIComponent(home)}&away_team=${encodeURIComponent(away)}&limit=10`,{cache:'no-store'});
+    const d=await r.json(); box.innerHTML='';
+    if(!d.predictions?.length){box.innerHTML='<div class="empty-note">ยังไม่มีคำวิเคราะห์ที่บันทึกไว้สำหรับคู่นี้</div>';return;}
+    d.predictions.forEach(p=>{
+      const row=document.createElement('div'); row.className='prediction-row';
+      const actual=p.actual ? `ผลจริง ${p.actual.score}` : 'รอผลการแข่งขัน';
+      const verdict=p.actual ? `${p.result_1x2_correct?'ทายผล 1X2 ถูก':'ทายผล 1X2 ไม่ตรง'}${p.exact_score_correct?' · สกอร์ตรง':''}` : '';
+      row.innerHTML=`<div><small>${p.fixture_date?`แข่ง ${fmtDate(p.fixture_date)}`:'ยังไม่ผูกกับโปรแกรมแข่งขัน'}</small><strong>โมเดล ${p.predicted_score} <span>→ ${actual}</span></strong><em>${verdict}</em></div>`;
+      box.appendChild(row);
+    });
+  }catch(e){box.innerHTML='<div class="empty-note">โหลดประวัติคำวิเคราะห์ไม่สำเร็จ</div>';}
+}
+
+$('analyzeBtn').addEventListener('click',async()=>{
+  const home=$('homeTeam').value, away=$('awayTeam').value;
+  if(home===away){$('status').textContent='กรุณาเลือกคนละทีม';return;}
+  $('analyzeBtn').disabled=true; $('status').textContent='กำลังอัปเดตข้อมูลและคำนวณ…';
+  try{
+    const r=await fetch('/api/predict?v=043',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_team:home,away_team:away}),cache:'no-store'});
+    const d=await r.json(); if(!r.ok) throw new Error(d.detail||'เกิดข้อผิดพลาด');
+    $('modelView').textContent=d.model_view;
+    $('summaryLine').textContent=`เจ้าบ้านชนะ ${pct(d.home_win)} · ประตูรวมคาดการณ์ ${Number(d.expected_total_goals).toFixed(2)} · สูง 2.5 ${pct(d.over_2_5)}`;
+    $('fixtureInfo').textContent=d.fixture?.date ? `โปรแกรมที่ระบบผูกไว้: ${fmtDate(d.fixture.date)}` : 'ยังไม่พบโปรแกรมแข่งขันคู่นี้ในข้อมูลปัจจุบัน — บันทึกเป็นการทดลองวิเคราะห์';
+    $('homeName').textContent=home; $('awayName').textContent=away; $('scorePick').textContent=d.most_likely_score; $('scoreProb').textContent=`โอกาส ${pct(d.most_likely_score_prob)}`;
+    $('homeWin').textContent=pct(d.home_win); $('draw').textContent=pct(d.draw); $('awayWin').textContent=pct(d.away_win);
+    $('homeBar').style.width=pct(d.home_win); $('drawBar').style.width=pct(d.draw); $('awayBar').style.width=pct(d.away_win);
+    $('xg').textContent=`${Number(d.expected_home_goals).toFixed(2)} – ${Number(d.expected_away_goals).toFixed(2)}`;
+    $('over25').textContent=pct(d.over_2_5); $('under25').textContent=pct(d.under_2_5); $('btts').textContent=pct(d.btts_yes);
+    renderAdvancedStats(d.advanced_stats);
+    $('topScores').innerHTML=''; (d.top_scorelines||[]).forEach((s,i)=>{const row=document.createElement('div');row.className='score-row';row.innerHTML=`<span class="score-rank">${i+1}</span><strong>${s.score}</strong><span>${pct(s.probability)}</span>`;$('topScores').appendChild(row);});
+    $('evidence').innerHTML=''; (d.statistical_evidence||[]).forEach(item=>{const box=document.createElement('div');box.className='evidence-item';box.innerHTML=`<strong></strong><span></span>`;box.querySelector('strong').textContent=item.title;box.querySelector('span').textContent=item.text;$('evidence').appendChild(box);});
+    $('reasons').innerHTML=`<li>Elo: ${home} ${d.home_elo} · ${away} ${d.away_elo}</li><li>ให้น้ำหนักฤดูกาลล่าสุดมากกว่าข้อมูลเก่า และไม่ใช้ราคาต่อรองเป็น input หลัก</li>`;
+    $('modelNote').textContent='ประตูคาดการณ์เป็นค่าจากโมเดล ไม่ใช่ shot-location xG';
+    renderH2H(d.h2h_matches||[]); await renderPredictionHistory(home,away);
+    $('results').classList.remove('hidden'); $('status').textContent=`วิเคราะห์สำเร็จ · Fooball v${VERSION}`; $('results').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){$('status').textContent=`วิเคราะห์ไม่สำเร็จ: ${e.message}`;}finally{$('analyzeBtn').disabled=false;}
+});
+init();
+
+</script>
 </body></html>

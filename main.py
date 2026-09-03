@@ -7,7 +7,7 @@ from predictor import FooballPredictor
 from prediction_store import save_prediction, list_predictions
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="Fooball", version="0.4.2.2")
+app = FastAPI(title="Fooball", version="0.4.3")
 predictor = FooballPredictor()
 
 class PredictRequest(BaseModel):
@@ -36,7 +36,16 @@ def sw():
 
 @app.get("/health")
 def health():
-    return {"status":"ok","version":"0.4.2.2"}
+    return {"status":"ok","version":"0.4.3","frontend_expected":"0.4.3","deployment_marker":"inline-frontend-043"}
+
+@app.get("/api/version")
+def api_version():
+    return {
+        "backend":"0.4.3",
+        "frontend_expected":"0.4.3",
+        "deployment_marker":"inline-frontend-043",
+        "javascript_mode":"inline",
+    }
 
 @app.get("/api/teams")
 def teams():
