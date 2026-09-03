@@ -1,91 +1,114 @@
-const homeSelect = document.getElementById("homeTeam");
-const awaySelect = document.getElementById("awayTeam");
-const form = document.getElementById("predictionForm");
-const resultSection = document.getElementById("results");
+const $ = id => document.getElementById(id);
+const pct = v => `${(Number(v)*100).toFixed(1)}%`;
 
-async function loadTeams() {
-  try {
-    const response = await fetch("/api/teams");
+async function init(){
+  try{
+    const r = await fetch('/api/teams', {cache:'no-store'});
+    const data = await r.json();
 
-    if (!response.ok) {
-      throw new Error("Unable to load teams");
-    }
+    $('homeTeam').innerHTML='';
+    $('awayTeam').innerHTML='';
 
-    const data = await response.json();
-    const teams = data.teams || data;
-
-    homeSelect.innerHTML =
-      '<option value="">เลือกทีมเจ้าบ้าน</option>';
-
-    awaySelect.innerHTML =
-      '<option value="">เลือกทีมเยือน</option>';
-
-    teams.forEach((team) => {
-      const homeOption = document.createElement("option");
-      homeOption.value = team;
-      homeOption.textContent = team;
-
-      const awayOption = document.createElement("option");
-      awayOption.value = team;
-      awayOption.textContent = team;
-
-      homeSelect.appendChild(homeOption);
-      awaySelect.appendChild(awayOption);
+    data.teams.forEach(t=>{
+      $('homeTeam').add(new Option(t,t));
+      $('awayTeam').add(new Option(t,t));
     });
-  } catch (error) {
-    console.error("Team loading error:", error);
+
+    $('homeTeam').value='Arsenal';
+    $('awayTeam').value='Coventry City';
+
+  }catch(e){
+    $('status').textContent='โหลดรายชื่อทีมไม่สำเร็จ';
   }
 }
 
-async function predictMatch(event) {
-  event.preventDefault();
+$('analyzeBtn').addEventListener('click', async()=>{
 
-  const homeTeam = homeSelect.value;
-  const awayTeam = awaySelect.value;
+  const home=$('homeTeam').value;
+  const away=$('awayTeam').value;
 
-  if (!homeTeam || !awayTeam) {
-    alert("กรุณาเลือกทั้งทีมเจ้าบ้านและทีมเยือน");
+  if(home===away){
+    $('status').textContent='กรุณาเลือกคนละทีม';
     return;
   }
 
-  if (homeTeam === awayTeam) {
-    alert("กรุณาเลือกทีมที่แตกต่างกัน");
-    return;
-  }
+  $('status').textContent=
+    'กำลังโหลดข้อมูลจริงและคำนวณ… ครั้งแรกอาจใช้เวลาสักครู่';
 
-  try {
-    const response = await fetch("/api/predict", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
+  $('analyzeBtn').disabled=true;
+
+  try{
+
+    const r=await fetch('/api/predict',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json'
       },
-      body: JSON.stringify({
-        home_team: homeTeam,
-        away_team: awayTeam
+      body:JSON.stringify({
+        home_team:home,
+        away_team:away
       })
     });
 
-    if (!response.ok) {
-      throw new Error("Prediction failed");
+    const d=await r.json();
+
+    if(!r.ok){
+      throw new Error(d.detail || 'เกิดข้อผิดพลาด');
     }
 
-    const data = await response.json();
+    $('homeName').textContent=home;
+    $('awayName').textContent=away;
 
-    console.log("Prediction:", data);
+    $('scorePick').textContent=d.most_likely_score;
+    $('scoreProb').textContent=
+      `โอกาส ${pct(d.most_likely_score_prob)}`;
 
-    if (resultSection) {
-      resultSection.style.display = "block";
-    }
-  } catch (error) {
-    console.error("Prediction error:", error);
-    alert("ไม่สามารถวิเคราะห์การแข่งขันได้ในขณะนี้");
-  }
-}
+    $('homeWin').textContent=pct(d.home_win);
+    $('draw').textContent=pct(d.draw);
+    $('awayWin').textContent=pct(d.away_win);
 
-document.addEventListener("DOMContentLoaded", () => {
-  loadTeams();
+    $('homeBar').style.width=pct(d.home_win);
+    $('drawBar').style.width=pct(d.draw);
+    $('awayBar').style.width=pct(d.away_win);
 
-  if (form) {
-    form.addEventListener("submit", predictMatch);
+    $('xg').textContent=
+      `${Number(d.expected_home_goals).toFixed(2)} – ` +
+      `${Number(d.expected_away_goals).toFixed(2)}`;
+
+    $('over25').textContent=pct(d.over_2_5);
+    $('under25').textContent=pct(d.under_2_5);
+    $('btts').textContent=pct(d.btts_yes);
+
+    $('reasons').innerHTML='';
+
+    (d.reasons || []).forEach(reason=>{
+      const li=document.createElement('li');
+      li.textContent=reason;
+      $('reasons').appendChild(li);
+    });
+
+    $('modelNote').textContent=
+      `${d.model} · ${d.data_source}`;
+
+    $('results').classList.remove('hidden');
+
+    $('status').textContent='วิเคราะห์สำเร็จ';
+
+    $('results').scrollIntoView({
+      behavior:'smooth',
+      block:'start'
+    });
+
+  }catch(e){
+
+    $('status').textContent=
+      `วิเคราะห์ไม่สำเร็จ: ${e.message}`;
+
+  }finally{
+
+    $('analyzeBtn').disabled=false;
+
   }
 });
+
+init();
