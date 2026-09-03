@@ -198,6 +198,61 @@ class FooballPredictor:
                         "text":"ข้อมูล H2H ไม่เพียงพอ จึงไม่ให้น้ำหนักส่วนนี้มากเกินไป"})
         return out
 
+
+    def _advanced_stats(self, home, away, n=18):
+        m = self.engine.epl
+        c = self.engine.champ
+        current = m[m.season=="2627"]
+
+        def source_for(team):
+            if team in PROMOTED and len(current[(current.HomeTeam==team)|(current.AwayTeam==team)]) < 5 and not c.empty:
+                return c, "Championship 2025/26"
+            return m, "Premier League"
+
+        def profile(team, venue):
+            frame, source = source_for(team)
+            if venue == "home":
+                x = frame[frame.HomeTeam==team].tail(n).copy()
+                cols = {"goals":"FTHG","shots":"HS","sot":"HST","corners":"HC","fouls":"HF","yellow":"HY","red":"HR"}
+            else:
+                x = frame[frame.AwayTeam==team].tail(n).copy()
+                cols = {"goals":"FTAG","shots":"AS","sot":"AST","corners":"AC","fouls":"AF","yellow":"AY","red":"AR"}
+            if x.empty:
+                return {"team":team,"venue":venue,"source":source,"matches":0}
+
+            out={"team":team,"venue":venue,"source":source,"matches":int(len(x))}
+            for key,col in cols.items():
+                if col in x.columns and x[col].notna().any():
+                    out[key] = float(pd.to_numeric(x[col], errors="coerce").mean())
+                else:
+                    out[key] = None
+            if out.get("shots") not in (None,0) and out.get("sot") is not None:
+                out["shot_accuracy"] = out["sot"]/out["shots"]
+            else:
+                out["shot_accuracy"] = None
+            if out.get("shots") not in (None,0) and out.get("goals") is not None:
+                out["goal_conversion"] = out["goals"]/out["shots"]
+            else:
+                out["goal_conversion"] = None
+            return out
+
+        hp=profile(home,"home")
+        ap=profile(away,"away")
+        available=[]
+        labels={"shots":"จำนวนยิง","sot":"ยิงตรงกรอบ","corners":"เตะมุม","fouls":"ฟาวล์","yellow":"ใบเหลือง","red":"ใบแดง"}
+        for k,label in labels.items():
+            if hp.get(k) is not None or ap.get(k) is not None:
+                available.append(label)
+
+        return {
+            "home": hp,
+            "away": ap,
+            "available_metrics": available,
+            "possession_available": False,
+            "shot_location_available": False,
+            "coverage_note": "Football-Data ชุดปัจจุบันรองรับ Shots, Shots on Target, Corners, Fouls และ Cards ในหลายฤดูกาล; ยังไม่มี possession และตำแหน่งยิงระดับ event/shot-location แบบสม่ำเสมอ จึงยังไม่สร้างค่าปลอมให้โมเดล",
+        }
+
     def predict(self, home, away):
         self._ensure_model()
         hr=self.rates.get(home,TeamRates()); ar=self.rates.get(away,TeamRates())
@@ -235,7 +290,7 @@ class FooballPredictor:
         view=max(probs,key=lambda x:x[1])[0]
 
         return {
-            "api_version":"0.4.0",
+            "api_version":"0.4.2",
             "season":"2026/27",
             "home_team":home,"away_team":away,
             "home_win":home_win,"draw":draw,"away_win":away_win,
@@ -249,6 +304,7 @@ class FooballPredictor:
             "home_elo":round(self.elo.get(home,1500),1),
             "away_elo":round(self.elo.get(away,1500),1),
             "statistical_evidence":self._evidence(home,away),
+            "advanced_stats":self._advanced_stats(home,away),
             "model":"Recency-weighted Poisson + Dixon-Coles + Elo + promoted-team prior",
             "data_source":"Football-Data.co.uk",
             "note":"Expected goals shown here are model-implied goals, not shot-location xG."
@@ -257,5 +313,5 @@ class FooballPredictor:
     def status(self):
         self._ensure_model()
         s=self.engine.status()
-        s.update({"api_version":"0.4.0","teams":len(self.current_teams)})
+        s.update({"api_version":"0.4.2","teams":len(self.current_teams)})
         return s

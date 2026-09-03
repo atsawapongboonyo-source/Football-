@@ -2,6 +2,7 @@ import io
 import time
 from pathlib import Path
 from typing import List, Dict, Tuple
+from datetime import datetime
 
 import pandas as pd
 import requests
@@ -31,7 +32,7 @@ FD_NAMES = {
 
 CORE_COLS = [
     "Date","HomeTeam","AwayTeam","FTHG","FTAG",
-    "HS","AS","HST","AST","HC","AC","HY","AY"
+    "HS","AS","HST","AST","HC","AC","HF","AF","HY","AY","HR","AR"
 ]
 
 def norm_name(x):
@@ -43,6 +44,7 @@ class FootballDataEngine:
         self.refresh_seconds = refresh_seconds
         self.epl = pd.DataFrame()
         self.champ = pd.DataFrame()
+        self.current_schedule = pd.DataFrame()
         self.last_refresh = None
         self.errors = []
 
@@ -76,12 +78,28 @@ class FootballDataEngine:
         out["HomeTeam"] = out["HomeTeam"].map(norm_name)
         out["AwayTeam"] = out["AwayTeam"].map(norm_name)
 
-        for c in ["FTHG","FTAG","HS","AS","HST","AST","HC","AC","HY","AY"]:
+        for c in ["FTHG","FTAG","HS","AS","HST","AST","HC","AC","HF","AF","HY","AY","HR","AR"]:
             if c in out.columns:
                 out[c] = pd.to_numeric(out[c], errors="coerce")
 
         out["season"] = season
         out["league"] = league
+        return out
+
+    def _clean_schedule(self, df, season):
+        required = {"Date","HomeTeam","AwayTeam"}
+        if not required.issubset(df.columns):
+            return pd.DataFrame()
+        cols = [c for c in ["Date","HomeTeam","AwayTeam","FTHG","FTAG"] if c in df.columns]
+        out = df[cols].copy()
+        out = out.dropna(subset=["HomeTeam","AwayTeam"])
+        out["HomeTeam"] = out["HomeTeam"].map(norm_name)
+        out["AwayTeam"] = out["AwayTeam"].map(norm_name)
+        for c in ["FTHG","FTAG"]:
+            if c in out.columns:
+                out[c] = pd.to_numeric(out[c], errors="coerce")
+        out["match_date"] = pd.to_datetime(out["Date"], dayfirst=True, errors="coerce")
+        out["season"] = season
         return out
 
     def refresh(self, force=False):
@@ -93,6 +111,8 @@ class FootballDataEngine:
         for season in EPL_SEASONS:
             try:
                 df = self._download_csv(EPL_URL.format(season=season), self._cache_path("E0", season))
+                if season == "2627":
+                    self.current_schedule = self._clean_schedule(df, season)
                 clean = self._clean(df, season, "Premier League")
                 if not clean.empty:
                     age = EPL_SEASONS.index(EPL_SEASONS[-1]) - EPL_SEASONS.index(season)
@@ -121,6 +141,57 @@ class FootballDataEngine:
 
         self.last_refresh = time.time()
 
+    def upcoming_fixture(self, home_team, away_team):
+        self.refresh()
+        if self.current_schedule.empty:
+            return None
+        x = self.current_schedule[(self.current_schedule.HomeTeam==home_team) & (self.current_schedule.AwayTeam==away_team)].copy()
+        if x.empty:
+            return None
+        x = x[x["FTHG"].isna() | x["FTAG"].isna()]
+        x = x.dropna(subset=["match_date"]).sort_values("match_date")
+        if x.empty:
+            return None
+        r = x.iloc[0]
+        return {"date": r.match_date.date().isoformat(), "home_team": home_team, "away_team": away_team}
+
+    def h2h_matches(self, team_a, team_b, limit=10):
+        self.refresh()
+        frames = [self.epl]
+        if not self.champ.empty:
+            frames.append(self.champ)
+        m = pd.concat(frames, ignore_index=True)
+        x = m[((m.HomeTeam==team_a)&(m.AwayTeam==team_b))|((m.HomeTeam==team_b)&(m.AwayTeam==team_a))].copy()
+        if x.empty:
+            return []
+        x["match_date"] = pd.to_datetime(x.get("Date"), dayfirst=True, errors="coerce")
+        x = x.sort_values("match_date", ascending=False).head(limit)
+        out=[]
+        for _,r in x.iterrows():
+            out.append({
+                "date": r.match_date.date().isoformat() if pd.notna(r.match_date) else str(r.get("Date", "")),
+                "season": str(r.get("season", "")),
+                "league": str(r.get("league", "")),
+                "home_team": r.HomeTeam, "away_team": r.AwayTeam,
+                "home_goals": int(r.FTHG), "away_goals": int(r.FTAG),
+            })
+        return out
+
+    def actual_for_fixture(self, home_team, away_team, fixture_date):
+        self.refresh()
+        if self.current_schedule.empty or not fixture_date:
+            return None
+        x = self.current_schedule[(self.current_schedule.HomeTeam==home_team) & (self.current_schedule.AwayTeam==away_team)].copy()
+        if x.empty:
+            return None
+        x = x.dropna(subset=["match_date"])
+        x = x[x.match_date.dt.date.astype(str) == fixture_date]
+        x = x.dropna(subset=["FTHG","FTAG"])
+        if x.empty:
+            return None
+        r=x.iloc[0]
+        return {"date": fixture_date, "home_goals": int(r.FTHG), "away_goals": int(r.FTAG), "score": f"{int(r.FTHG)}–{int(r.FTAG)}"}
+
     def status(self):
         self.refresh()
         return {
@@ -128,5 +199,7 @@ class FootballDataEngine:
             "championship_matches": int(len(self.champ)),
             "current_season_matches": int((self.epl["season"]=="2627").sum()) if not self.epl.empty else 0,
             "last_refresh_unix": self.last_refresh,
+            "scheduled_rows": int(len(self.current_schedule)),
+            "refresh_interval_seconds": self.refresh_seconds,
             "errors": self.errors[-5:],
         }

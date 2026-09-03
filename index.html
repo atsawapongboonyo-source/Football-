@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#0b1115">
 <title>Fooball — Match Intelligence</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=040">
+<link rel="stylesheet" href="/styles.css?v=042">
 </head>
 <body>
 <main class="wrap">
 <header>
   <div><div class="brand">FOOBALL<span>.</span></div><div class="subbrand">MATCH INTELLIGENCE</div></div>
-  <div class="beta">V0.4</div>
+  <div class="beta">V0.4.2</div>
 </header>
 
 <section class="hero">
@@ -33,7 +33,7 @@
   <div class="summary card">
     <span class="summary-label">มุมมองของโมเดล</span>
     <h2 id="modelView">–</h2>
-    <div id="summaryLine" class="summary-line"></div>
+    <div id="summaryLine" class="summary-line"></div><div id="fixtureInfo" class="fixture-info"></div>
   </div>
 
   <div class="matchline">
@@ -59,6 +59,25 @@
   <div class="card"><h2>สกอร์ที่มีโอกาสมากที่สุด</h2><div id="topScores" class="top-scores"></div></div>
 
   <div class="card">
+    <h2>สถิติการแข่งขันเชิงลึก</h2>
+    <div class="section-note">เปรียบเทียบค่าเฉลี่ยตามบริบทเจ้าบ้าน/ทีมเยือนจากแมตช์ล่าสุดที่มีข้อมูล</div>
+    <div id="advancedStats" class="advanced-stats"></div>
+    <div id="advancedCoverage" class="fine"></div>
+  </div>
+
+  <div class="card">
+    <h2>สกอร์ย้อนหลังของคู่นี้</h2>
+    <div class="section-note">แสดงผลการแข่งขันที่พบในฐานข้อมูล เพื่อใช้เป็นบริบท ไม่ได้ให้น้ำหนัก H2H มากเกินไป</div>
+    <div id="h2hList" class="history-list"></div>
+  </div>
+
+  <div class="card">
+    <h2>คำวิเคราะห์เทียบผลจริง</h2>
+    <div class="section-note">ระบบบันทึกคำวิเคราะห์ก่อนแข่ง และเมื่อแหล่งข้อมูลมีผลจบ จะนำสกอร์จริงมาเทียบอัตโนมัติ</div>
+    <div id="predictionHistory" class="history-list"></div>
+  </div>
+
+  <div class="card">
     <h2>ผลจากการวิเคราะห์</h2>
     <div id="evidence" class="evidence"></div>
     <div class="model-detail-title">วิธีที่โมเดลนำสถิติมาประกอบ</div>
@@ -66,7 +85,7 @@
     <div id="modelNote" class="fine"></div>
   </div>
 </section>
-<footer>Fooball v0.4 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
+<footer>Fooball v0.4.2 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
 </main>
-<script src="/app.js?v=040"></script>
+<script src="/app.js?v=042"></script>
 </body></html>
