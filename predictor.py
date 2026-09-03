@@ -178,12 +178,12 @@ class FooballPredictor:
             out.append({"title":f"สถิติในบ้านของ {home}",
                         "text":f"{home_source} · {hs['matches']} นัดล่าสุด: ชนะ {hs['wins']} เสมอ {hs['draws']} แพ้ {hs['losses']} · อัตราชนะ {hs['win_rate']*100:.0f}% · ยิงเฉลี่ย {hs['gf']:.2f} · เสียเฉลี่ย {hs['ga']:.2f} ประตู/นัด"})
             out.append({"title":f"เกมรุก/รับของ {home}",
-                        "text":f"ยิงได้ {hs['scored']*100:.0f}% · คลีนชีต {hs['cs']*100:.0f}% · สูง 2.5 {hs['over25']*100:.0f}% · BTTS {hs['btts']*100:.0f}%"})
+                        "text":f"ยิงได้ {hs['scored']*100:.0f}% · ยิงไม่ได้ {(1-hs['scored'])*100:.0f}% · คลีนชีต {hs['cs']*100:.0f}% · สูง 2.5 {hs['over25']*100:.0f}% · BTTS {hs['btts']*100:.0f}%"})
         if av:
             out.append({"title":f"สถิติเกมเยือนของ {away}",
                         "text":f"{away_source} · {av['matches']} นัดล่าสุด: ชนะ {av['wins']} เสมอ {av['draws']} แพ้ {av['losses']} · อัตราชนะ {av['win_rate']*100:.0f}% · ยิงเฉลี่ย {av['gf']:.2f} · เสียเฉลี่ย {av['ga']:.2f} ประตู/นัด"})
             out.append({"title":f"เกมรุก/รับของ {away}",
-                        "text":f"ยิงได้ {av['scored']*100:.0f}% · คลีนชีต {av['cs']*100:.0f}% · สูง 2.5 {av['over25']*100:.0f}% · BTTS {av['btts']*100:.0f}%"})
+                        "text":f"ยิงได้ {av['scored']*100:.0f}% · ยิงไม่ได้ {(1-av['scored'])*100:.0f}% · คลีนชีต {av['cs']*100:.0f}% · สูง 2.5 {av['over25']*100:.0f}% · BTTS {av['btts']*100:.0f}%"})
         if hf:
             out.append({"title":f"ฟอร์ม {hf['matches']} นัดล่าสุดของ {home}",
                         "text":f"{' – '.join(hf['seq'])} · ยิงเฉลี่ย {hf['gf']:.2f} · เสียเฉลี่ย {hf['ga']:.2f}"})
@@ -196,6 +196,140 @@ class FooballPredictor:
         else:
             out.append({"title":"สถิติการพบกันย้อนหลัง",
                         "text":"ข้อมูล H2H ไม่เพียงพอ จึงไม่ให้น้ำหนักส่วนนี้มากเกินไป"})
+        return out
+
+
+    def _goal_engine_context(self, team, venue, n=18):
+        """Return venue-specific attack/defence context for the score engine.
+
+        Promoted clubs use the same Championship fallback policy as the evidence
+        cards until they have enough current Premier League matches.
+        """
+        m = self.engine.epl
+        c = self.engine.champ
+        current = m[m.season=="2627"]
+        frame, source = m, "Premier League"
+        if team in PROMOTED and len(current[(current.HomeTeam==team)|(current.AwayTeam==team)]) < 5 and not c.empty:
+            frame, source = c, "Championship 2025/26"
+
+        if venue == "home":
+            x = frame[frame.HomeTeam==team].tail(n).copy()
+            gf, ga = "FTHG", "FTAG"
+            shots, sot = "HS", "HST"
+        else:
+            x = frame[frame.AwayTeam==team].tail(n).copy()
+            gf, ga = "FTAG", "FTHG"
+            shots, sot = "AS", "AST"
+
+        if x.empty:
+            return {
+                "team": team, "venue": venue, "source": source, "matches": 0,
+                "gf": None, "ga": None, "scored": None, "clean_sheet": None,
+                "failed_to_score": None, "recent_gf": None, "recent_ga": None,
+                "shots": None, "sot": None, "shot_accuracy": None, "conversion": None,
+            }
+
+        G = pd.to_numeric(x[gf], errors="coerce").astype(float)
+        A = pd.to_numeric(x[ga], errors="coerce").astype(float)
+        out = {
+            "team": team,
+            "venue": venue,
+            "source": source,
+            "matches": int(len(x)),
+            "gf": float(G.mean()),
+            "ga": float(A.mean()),
+            "scored": float((G > 0).mean()),
+            "clean_sheet": float((A == 0).mean()),
+            "failed_to_score": float((G == 0).mean()),
+            "recent_gf": float(G.tail(5).mean()),
+            "recent_ga": float(A.tail(5).mean()),
+        }
+        sh = pd.to_numeric(x[shots], errors="coerce") if shots in x.columns else pd.Series(dtype=float)
+        st = pd.to_numeric(x[sot], errors="coerce") if sot in x.columns else pd.Series(dtype=float)
+        out["shots"] = float(sh.mean()) if len(sh) and sh.notna().any() else None
+        out["sot"] = float(st.mean()) if len(st) and st.notna().any() else None
+        out["shot_accuracy"] = (out["sot"] / out["shots"]) if out.get("shots") not in (None, 0) and out.get("sot") is not None else None
+        out["conversion"] = (out["gf"] / out["shots"]) if out.get("shots") not in (None, 0) else None
+        return out
+
+    @staticmethod
+    def _clip_factor(value, low=.90, high=1.10):
+        return max(low, min(high, float(value)))
+
+    def _goal_engine_adjustment(self, home, away, base_home, base_away):
+        """Contextual adjustment used before building the score matrix.
+
+        The baseline already contains recency-weighted attack/defence and Elo.
+        This layer therefore stays deliberately small to avoid double-counting.
+        Clean-sheet and failed-to-score rates are handled separately as a
+        zero-goal probability adjustment in the matrix itself.
+        """
+        hc = self._goal_engine_context(home, "home")
+        ac = self._goal_engine_context(away, "away")
+
+        # Recent scoring form: only a modest adjustment around venue baseline.
+        h_form = 1.0
+        a_form = 1.0
+        if hc.get("gf") and hc.get("recent_gf") is not None:
+            h_form = self._clip_factor((hc["recent_gf"] + .35) / (hc["gf"] + .35), .92, 1.08)
+        if ac.get("gf") and ac.get("recent_gf") is not None:
+            a_form = self._clip_factor((ac["recent_gf"] + .35) / (ac["gf"] + .35), .92, 1.08)
+
+        # Shot quality proxy: SOT rate + conversion. Compare each side to a
+        # conservative football baseline and cap tightly because these metrics
+        # can be noisy over 18 matches.
+        def shot_factor(ctx):
+            vals=[]
+            if ctx.get("shot_accuracy") is not None:
+                vals.append(self._clip_factor(ctx["shot_accuracy"] / .33, .95, 1.05))
+            if ctx.get("conversion") is not None:
+                vals.append(self._clip_factor(ctx["conversion"] / .105, .95, 1.05))
+            return float(np.mean(vals)) if vals else 1.0
+
+        h_shot = shot_factor(hc)
+        a_shot = shot_factor(ac)
+        lam_h = max(.2, min(3.8, base_home * h_form * h_shot))
+        lam_a = max(.15, min(3.5, base_away * a_form * a_shot))
+
+        # Target probability that each team scores zero.  Blend the attacking
+        # team's failed-to-score rate with the opponent's venue clean-sheet rate.
+        # Shrink toward the Poisson baseline to avoid overreacting to small samples.
+        base_h0 = math.exp(-lam_h)
+        base_a0 = math.exp(-lam_a)
+        obs_h0 = np.mean([x for x in [hc.get("failed_to_score"), ac.get("clean_sheet")] if x is not None]) if any(x is not None for x in [hc.get("failed_to_score"), ac.get("clean_sheet")]) else base_h0
+        obs_a0 = np.mean([x for x in [ac.get("failed_to_score"), hc.get("clean_sheet")] if x is not None]) if any(x is not None for x in [ac.get("failed_to_score"), hc.get("clean_sheet")]) else base_a0
+        # 45% observed venue signal + 55% model baseline.
+        target_h0 = .55 * base_h0 + .45 * float(obs_h0)
+        target_a0 = .55 * base_a0 + .45 * float(obs_a0)
+
+        return {
+            "home": hc,
+            "away": ac,
+            "base_home_goals": float(base_home),
+            "base_away_goals": float(base_away),
+            "adjusted_home_goals": float(lam_h),
+            "adjusted_away_goals": float(lam_a),
+            "home_form_factor": float(h_form),
+            "away_form_factor": float(a_form),
+            "home_shot_factor": float(h_shot),
+            "away_shot_factor": float(a_shot),
+            "target_home_zero": float(max(.02, min(.78, target_h0))),
+            "target_away_zero": float(max(.02, min(.78, target_a0))),
+        }
+
+    @staticmethod
+    def _apply_zero_goal_context(mat, target_home_zero, target_away_zero):
+        """Reweight 0-goal rows/columns to reflect CS + failed-to-score context."""
+        out = mat.copy()
+        cur_h0 = float(out[0, :].sum())
+        cur_a0 = float(out[:, 0].sum())
+        if cur_h0 > 0:
+            out[0, :] *= max(.65, min(1.60, target_home_zero / cur_h0))
+        if cur_a0 > 0:
+            out[:, 0] *= max(.65, min(1.60, target_away_zero / cur_a0))
+        total = float(out.sum())
+        if total > 0:
+            out /= total
         return out
 
 
@@ -294,8 +428,11 @@ class FooballPredictor:
         hr=self.rates.get(home,TeamRates()); ar=self.rates.get(away,TeamRates())
         diff=self.elo.get(home,1500)-self.elo.get(away,1500)
 
-        lam_h=max(.2,min(3.8,self.home_avg*hr.home_attack*ar.away_defense*math.exp(diff/1800)))
-        lam_a=max(.15,min(3.5,self.away_avg*ar.away_attack*hr.home_defense*math.exp(-diff/1800)))
+        base_lam_h=max(.2,min(3.8,self.home_avg*hr.home_attack*ar.away_defense*math.exp(diff/1800)))
+        base_lam_a=max(.15,min(3.5,self.away_avg*ar.away_attack*hr.home_defense*math.exp(-diff/1800)))
+        goal_ctx=self._goal_engine_adjustment(home, away, base_lam_h, base_lam_a)
+        lam_h=goal_ctx["adjusted_home_goals"]
+        lam_a=goal_ctx["adjusted_away_goals"]
 
         n=8
         mat=np.zeros((n+1,n+1))
@@ -312,6 +449,9 @@ class FooballPredictor:
         }.items():
             mat[i,j]*=max(.5,f)
         mat/=mat.sum()
+        # Clean-sheet + failed-to-score context directly changes the mass of
+        # 0-goal outcomes rather than merely subtracting from expected goals.
+        mat=self._apply_zero_goal_context(mat, goal_ctx["target_home_zero"], goal_ctx["target_away_zero"])
 
         home_win=float(np.tril(mat,-1).sum())
         draw=float(np.trace(mat))
@@ -331,7 +471,7 @@ class FooballPredictor:
         view=max(probs,key=lambda x:x[1])[0]
 
         return {
-            "api_version":"0.4.9",
+            "api_version":"0.5.0",
             "season":"2026/27",
             "home_team":home,"away_team":away,
             "home_win":home_win,"draw":draw,"away_win":away_win,
@@ -341,6 +481,14 @@ class FooballPredictor:
             "most_likely_score":top[0]["score"],
             "most_likely_score_prob":top[0]["probability"],
             "top_scorelines":top,
+            "goal_prediction_engine": {
+                **goal_ctx,
+                "predicted_score": top[0]["score"],
+                "predicted_score_probability": top[0]["probability"],
+                "home_zero_probability": float(mat[0,:].sum()),
+                "away_zero_probability": float(mat[:,0].sum()),
+                "method_note": "สกอร์คาดการณ์ใช้พลังเกมเหย้า/เยือน + เกมรับคู่แข่ง + ฟอร์มล่าสุด + Shots/SOT/Conversion + Elo และปรับโอกาสยิง 0 ด้วย Clean Sheet และ Failed-to-score; H2H ใช้เป็นบริบทเมื่อตัวอย่างเพียงพอ",
+            },
             "score_distribution": {
                 "home_goal_band": home_band,
                 "away_goal_band": away_band,
@@ -353,13 +501,13 @@ class FooballPredictor:
             "away_elo":round(self.elo.get(away,1500),1),
             "statistical_evidence":self._evidence(home,away),
             "advanced_stats":self._advanced_stats(home,away),
-            "model":"Recency-weighted Poisson + Dixon-Coles + Elo + promoted-team prior",
+            "model":"Recency-weighted Poisson + Dixon-Coles + Elo + promoted-team prior + venue goal context",
             "data_source":"Football-Data.co.uk",
-            "note":"Expected goals shown here are model-implied goals, not shot-location xG."
+            "note":"Expected goals are model-implied scoring means. Clean-sheet and failed-to-score rates also adjust the probability of 0-goal outcomes; this is not shot-location xG."
         }
 
     def status(self):
         self._ensure_model()
         s=self.engine.status()
-        s.update({"api_version":"0.4.9","teams":len(self.current_teams)})
+        s.update({"api_version":"0.5.0","teams":len(self.current_teams)})
         return s
