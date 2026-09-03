@@ -210,12 +210,26 @@ class FootballDataEngine:
         if x.empty:
             return None
         x = x.dropna(subset=["match_date"])
-        x = x[x.match_date.dt.date.astype(str) == fixture_date]
         x = x.dropna(subset=["FTHG","FTAG"])
         if x.empty:
             return None
-        r=x.iloc[0]
-        return {"date": fixture_date, "home_goals": int(r.FTHG), "away_goals": int(r.FTAG), "score": f"{int(r.FTHG)}–{int(r.FTAG)}"}
+        target = pd.to_datetime(fixture_date, errors="coerce")
+        if pd.isna(target):
+            return None
+        exact = x[x.match_date.dt.date.astype(str) == fixture_date]
+        if not exact.empty:
+            r = exact.iloc[0]
+        else:
+            # Date-only feeds can occasionally differ by one calendar day around
+            # timezone conversion. Match the same teams only within ±1 day.
+            delta = (x.match_date.dt.normalize() - target.normalize()).abs()
+            near = x[delta <= pd.Timedelta(days=1)].copy()
+            if near.empty:
+                return None
+            near["_delta"] = (near.match_date.dt.normalize() - target.normalize()).abs()
+            r = near.sort_values("_delta").iloc[0]
+        actual_date = r.match_date.date().isoformat()
+        return {"date": actual_date, "home_goals": int(r.FTHG), "away_goals": int(r.FTAG), "score": f"{int(r.FTHG)}–{int(r.FTAG)}"}
 
     def status(self):
         self.refresh()

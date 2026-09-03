@@ -21,7 +21,7 @@ def _write(rows):
     STORE_PATH.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def save_prediction(prediction, fixture_date):
+def save_prediction(prediction, fixture_date, fixture_id=None, kickoff_utc=None, fixture_source=None):
     """Persist only genuine pre-match predictions tied to a known future fixture."""
     if not fixture_date:
         return None
@@ -30,6 +30,9 @@ def save_prediction(prediction, fixture_date):
         "id": f"p-{int(now.timestamp()*1000)}",
         "created_at": now.isoformat(),
         "fixture_date": fixture_date,
+        "fixture_id": fixture_id,
+        "kickoff_utc": kickoff_utc,
+        "fixture_source": fixture_source,
         "home_team": prediction["home_team"],
         "away_team": prediction["away_team"],
         "predicted_score": prediction["most_likely_score"],
@@ -49,7 +52,7 @@ def save_prediction(prediction, fixture_date):
         rows = [r for r in rows if not (
             r.get("home_team") == record["home_team"] and
             r.get("away_team") == record["away_team"] and
-            r.get("fixture_date") == fixture_date and
+            ((fixture_id and r.get("fixture_id") == fixture_id) or (not fixture_id and r.get("fixture_date") == fixture_date)) and
             r.get("api_version") == record["api_version"]
         )]
         rows.append(record)

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1115">
 <title>Fooball — Match Intelligence</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=044">
+<link rel="stylesheet" href="/styles.css?v=045">
 </head>
 <body>
 <main class="wrap">
@@ -92,16 +92,24 @@
   </div>
 
 </section>
-<footer>Fooball v0.4.4 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
+<footer>Fooball v0.4.5 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 const pct=v=>`${(Number(v)*100).toFixed(1)}%`;
-const VERSION='0.4.4';
+const VERSION='0.4.5';
 
 function fmtDate(s){
   if(!s) return 'ไม่พบวันแข่งขันในแหล่งข้อมูล';
   try{return new Intl.DateTimeFormat('th-TH',{dateStyle:'medium'}).format(new Date(`${s}T12:00:00`));}catch{return s;}
+}
+
+function fmtKickoff(iso){
+  if(!iso) return '';
+  try{
+    const d=new Date(iso);
+    return new Intl.DateTimeFormat('th-TH',{dateStyle:'medium',timeStyle:'short'}).format(d);
+  }catch{return '';}
 }
 
 async function clearLegacyCaches(){
@@ -121,7 +129,7 @@ async function init(){
   await clearLegacyCaches();
   if($('status')) $('status').textContent=`Frontend v${VERSION} · กำลังตรวจ Backend…`;
   try{
-    const vr=await fetch('/api/version?v=044',{cache:'no-store'});
+    const vr=await fetch('/api/version?v=045',{cache:'no-store'});
     const vd=await vr.json();
     if(vd.backend!==VERSION){
       $('status').textContent=`เวอร์ชันไม่ตรง: Frontend ${VERSION} / Backend ${vd.backend||'unknown'}`;
@@ -132,7 +140,7 @@ async function init(){
     $('status').textContent=`Frontend v${VERSION} · ตรวจ Backend ไม่สำเร็จ`;
   }
   try{
-    const r=await fetch('/api/teams?v=043',{cache:'no-store'}); const d=await r.json();
+    const r=await fetch('/api/teams?v=045',{cache:'no-store'}); const d=await r.json();
     $('homeTeam').innerHTML=''; $('awayTeam').innerHTML='';
     d.teams.forEach(t=>{$('homeTeam').add(new Option(t,t));$('awayTeam').add(new Option(t,t));});
     $('homeTeam').value='Arsenal'; $('awayTeam').value='Coventry City';
@@ -201,7 +209,7 @@ async function renderPredictionHistory(home,away){
 async function renderModelPerformance(){
   const box=$('modelPerformance'); if(!box) return;
   try{
-    const r=await fetch('/api/model-performance?v=044',{cache:'no-store'}); const d=await r.json();
+    const r=await fetch('/api/model-performance?v=045',{cache:'no-store'}); const d=await r.json();
     if(!d.resolved_predictions){
       box.innerHTML=`<div class="empty-note">${d.note||'ยังไม่มีผลจริงสำหรับวัดความแม่นยำ'}<br>รอผล: ${d.pending_predictions||0} รายการ</div>`; return;
     }
@@ -215,7 +223,9 @@ async function renderModelPerformance(){
 function renderFixtureContext(d){
   const ctx=d.fixture_context||{};
   if(ctx.status==='upcoming' && ctx.fixture){
-    $('fixtureInfo').textContent=`โปรแกรมที่พบ: ${fmtDate(ctx.fixture.date)} · บันทึกเป็นคำทำนายก่อนแข่งแล้ว`;
+    const kickoff=fmtKickoff(ctx.fixture.kickoff_utc);
+    const source=ctx.fixture.source?` · ${ctx.fixture.source}`:'';
+    $('fixtureInfo').textContent=`โปรแกรมที่พบ: ${kickoff||fmtDate(ctx.fixture.date)}${source} · บันทึกเป็นคำทำนายก่อนแข่งแล้ว`;
   }else if(ctx.status==='completed' && ctx.actual){
     $('fixtureInfo').textContent=`คู่นี้แข่งจบแล้ว · ผลจริง ${ctx.actual.score} · การวิเคราะห์ครั้งนี้เป็นย้อนหลังและไม่นับในความแม่นยำ`;
   }else{
@@ -228,7 +238,7 @@ $('analyzeBtn').addEventListener('click',async()=>{
   if(home===away){$('status').textContent='กรุณาเลือกคนละทีม';return;}
   $('analyzeBtn').disabled=true; $('status').textContent='กำลังอัปเดตข้อมูลและคำนวณ…';
   try{
-    const r=await fetch('/api/predict?v=044',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_team:home,away_team:away}),cache:'no-store'});
+    const r=await fetch('/api/predict?v=045',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_team:home,away_team:away}),cache:'no-store'});
     const d=await r.json(); if(!r.ok) throw new Error(d.detail||'เกิดข้อผิดพลาด');
     $('modelView').textContent=d.model_view;
     $('summaryLine').textContent=`เจ้าบ้านชนะ ${pct(d.home_win)} · ประตูรวมคาดการณ์ ${Number(d.expected_total_goals).toFixed(2)} · สูง 2.5 ${pct(d.over_2_5)}`;
