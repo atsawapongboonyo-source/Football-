@@ -440,6 +440,7 @@ class FooballPredictor:
             reasons.append(f"ใช้ผลการแข่งขัน Premier League 2026/27 ที่มีในฐานข้อมูลแล้ว {self.current_matches_loaded} นัด")
 
         return {
+            "api_version":"0.3.4",
             "season":"2026/27",
             "home_team":home,
             "away_team":away,

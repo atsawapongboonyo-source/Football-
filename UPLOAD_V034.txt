@@ -1,0 +1,19 @@
+Fooball v0.3.4 FIX
+
+IMPORTANT: Replace ALL 4 files in GitHub root:
+- app.js        <-- mandatory; this is what was still old/stale
+- index.html
+- predictor.py
+- styles.css
+
+Commit message:
+Fix Fooball v0.3.4 frontend and statistical evidence
+
+After Render is Live:
+1) close the Fooball browser tab completely
+2) reopen https://football-4ee0.onrender.com
+3) run Arsenal vs Coventry City
+4) under the green button, status should say:
+   วิเคราะห์สำเร็จ · Frontend v0.3.4
+
+If that text appears, the correct app.js is definitely loaded.
