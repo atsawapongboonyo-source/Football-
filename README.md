@@ -1,23 +1,19 @@
-# Fooball v0.4.8 — Fixture Engine Fix
+# Fooball v0.4.9 — Fixture Auto-Analyze UX
 
-This build keeps the v0.4.7 prediction model unchanged and fixes fixture discovery.
+ต่อจาก v0.4.8 โดยคงสูตรโมเดลเดิมทั้งหมด และปรับ UX ของโปรแกรมพรีเมียร์ลีกถัดไป
 
-## What changed
-- ESPN requests no longer send a custom User-Agent because the public endpoint may reject spoofed/custom headers.
-- Keeps Football-Data fixture discovery as a source.
-- Adds a confirmed Premier League September 2026 fallback so temporary provider failure does not leave the next-fixtures card empty.
-- Merges and de-duplicates providers by date/home/away.
-- `/api/fixture-status` shows provider counts and errors.
-- `/api/upcoming-fixtures?days=10` should now return confirmed upcoming EPL fixtures when they fall in the window.
-- Prediction tracking is still saved only when a genuine future fixture is found.
+## เปลี่ยนแปลงหลัก
+- แตะคู่แข่งขันใน “โปรแกรมพรีเมียร์ลีกถัดไป” แล้วระบบเลือกทีมและวิเคราะห์ให้อัตโนมัติทันที
+- Dropdown แบบเลือกทีมเองยังคงต้องกด “วิเคราะห์การแข่งขัน” เพื่อป้องกันการยิง API โดยไม่ตั้งใจ
+- Fixture ที่ระบบยืนยันว่าเป็นเกมอนาคตยังคงถูกบันทึกเป็น pre-match prediction ตามเดิม
+- เพิ่มสถานะ selected ให้คู่ที่ผู้ใช้แตะ
+- ไม่เปลี่ยนสูตร 1X2, expected goals, score probability, Elo หรือ promoted-team prior
 
 ## Deploy
-Upload all files to the GitHub repository root and commit, for example:
-`Upgrade Fooball v0.4.8 fixture engine fix`
+อัปโหลดไฟล์ทั้งหมดไป GitHub root แล้ว commit เช่น:
+`Upgrade Fooball v0.4.9 fixture auto analyze`
 
-After Render deploy, test:
-- `/health` -> 0.4.8
-- `/api/fixture-status`
-- `/api/upcoming-fixtures?days=10`
-
-The statistical model itself is unchanged from v0.4.7.
+ตรวจหลัง deploy:
+- `/health` -> 0.4.9
+- แตะคู่ในโปรแกรมถัดไป -> วิเคราะห์อัตโนมัติ
+- เลือกทีมจาก dropdown เอง -> ยังใช้ปุ่มวิเคราะห์

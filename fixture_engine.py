@@ -131,7 +131,7 @@ class FixtureEngine:
         if use_cache:
             text = cache.read_text(encoding="utf-8", errors="ignore")
         else:
-            r = requests.get(FIXTURES_URL, timeout=15, headers={"User-Agent": "Fooball/0.4.8"})
+            r = requests.get(FIXTURES_URL, timeout=15, headers={"User-Agent": "Fooball/0.4.9"})
             r.raise_for_status()
             text = r.text
             cache.write_text(text, encoding="utf-8")
@@ -330,7 +330,7 @@ class FixtureEngine:
             src = f.get("source") or "unknown"
             source_counts[src] = source_counts.get(src, 0) + 1
         return {
-            "version": "0.4.8",
+            "version": "0.4.9",
             "provider": self.provider,
             "fixture_count": len(self.fixtures),
             "provider_counts": self.provider_counts,
