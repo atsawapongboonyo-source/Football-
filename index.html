@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#0b1115">
 <title>Fooball — Match Intelligence</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/styles.css?v=046">
+<link rel="stylesheet" href="/styles.css?v=047">
 </head>
 <body>
 <main class="wrap">
 <header>
   <div><div class="brand">FOOBALL<span>.</span></div><div class="subbrand">MATCH INTELLIGENCE</div></div>
-  <div class="beta">V0.4.6</div>
+  <div class="beta">V0.4.7</div>
 </header>
 
 <section class="hero">
@@ -98,12 +98,12 @@
   </div>
 
 </section>
-<footer>Fooball v0.4.6 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
+<footer>Fooball v0.4.7 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 const pct=v=>`${(Number(v)*100).toFixed(1)}%`;
-const VERSION='0.4.6';
+const VERSION='0.4.7';
 
 function fmtDate(s){
   if(!s) return 'ไม่พบวันแข่งขันในแหล่งข้อมูล';
@@ -135,7 +135,7 @@ async function init(){
   await clearLegacyCaches();
   if($('status')) $('status').textContent=`Frontend v${VERSION} · กำลังตรวจ Backend…`;
   try{
-    const vr=await fetch('/api/version?v=046',{cache:'no-store'});
+    const vr=await fetch('/api/version?v=047',{cache:'no-store'});
     const vd=await vr.json();
     if(vd.backend!==VERSION){
       $('status').textContent=`เวอร์ชันไม่ตรง: Frontend ${VERSION} / Backend ${vd.backend||'unknown'}`;
@@ -146,7 +146,7 @@ async function init(){
     $('status').textContent=`Frontend v${VERSION} · ตรวจ Backend ไม่สำเร็จ`;
   }
   try{
-    const r=await fetch('/api/teams?v=046',{cache:'no-store'}); const d=await r.json();
+    const r=await fetch('/api/teams?v=047',{cache:'no-store'}); const d=await r.json();
     $('homeTeam').innerHTML=''; $('awayTeam').innerHTML='';
     d.teams.forEach(t=>{$('homeTeam').add(new Option(t,t));$('awayTeam').add(new Option(t,t));});
     $('homeTeam').value='Arsenal'; $('awayTeam').value='Coventry City';
@@ -162,7 +162,7 @@ function statValue(v, suffix=''){
 async function loadUpcomingFixtures(){
   const box=$('upcomingFixtures'); if(!box) return;
   try{
-    const r=await fetch('/api/upcoming-fixtures?days=10&v=046',{cache:'no-store'});
+    const r=await fetch('/api/upcoming-fixtures?days=10&v=047',{cache:'no-store'});
     const d=await r.json(); box.innerHTML='';
     if(!d.fixtures?.length){box.innerHTML='<div class="empty-note">Fixture Engine ยังไม่พบโปรแกรม 10 วันข้างหน้า</div>';return;}
     d.fixtures.slice(0,12).forEach(f=>{
@@ -240,7 +240,7 @@ async function renderPredictionHistory(home,away){
 async function renderModelPerformance(){
   const box=$('modelPerformance'); if(!box) return;
   try{
-    const r=await fetch('/api/model-performance?v=046',{cache:'no-store'}); const d=await r.json();
+    const r=await fetch('/api/model-performance?v=047',{cache:'no-store'}); const d=await r.json();
     if(!d.resolved_predictions){
       box.innerHTML=`<div class="empty-note">${d.note||'ยังไม่มีผลจริงสำหรับวัดความแม่นยำ'}<br>รอผล: ${d.pending_predictions||0} รายการ</div>`; return;
     }
@@ -269,21 +269,21 @@ $('analyzeBtn').addEventListener('click',async()=>{
   if(home===away){$('status').textContent='กรุณาเลือกคนละทีม';return;}
   $('analyzeBtn').disabled=true; $('status').textContent='กำลังอัปเดตข้อมูลและคำนวณ…';
   try{
-    const r=await fetch('/api/predict?v=046',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_team:home,away_team:away}),cache:'no-store'});
+    const r=await fetch('/api/predict?v=047',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({home_team:home,away_team:away}),cache:'no-store'});
     const d=await r.json(); if(!r.ok) throw new Error(d.detail||'เกิดข้อผิดพลาด');
     $('modelView').textContent=d.model_view;
     $('summaryLine').textContent=`เจ้าบ้านชนะ ${pct(d.home_win)} · ประตูรวมคาดการณ์ ${Number(d.expected_total_goals).toFixed(2)} · สูง 2.5 ${pct(d.over_2_5)}`;
     $('homeName').textContent=home; $('awayName').textContent=away;
     const dist=d.score_distribution||{};
     $('goalRange').textContent=`${bandText(dist.home_goal_band)} | ${bandText(dist.away_goal_band)}`;
-    $('scoreProb').textContent=`ช่วงประตูคาด · สกอร์เด่น ${d.most_likely_score} (${pct(d.most_likely_score_prob)})`;
+    $('scoreProb').textContent=`ช่วงประตูหลัก ≈80% · สกอร์เด่น ${d.most_likely_score} (${pct(d.most_likely_score_prob)})`;
     $('homeWin').textContent=pct(d.home_win); $('draw').textContent=pct(d.draw); $('awayWin').textContent=pct(d.away_win);
     $('homeBar').style.width=pct(d.home_win); $('drawBar').style.width=pct(d.draw); $('awayBar').style.width=pct(d.away_win);
     $('xg').textContent=`${Number(d.expected_home_goals).toFixed(2)} – ${Number(d.expected_away_goals).toFixed(2)}`;
     $('over25').textContent=pct(d.over_2_5); $('under25').textContent=pct(d.under_2_5); $('btts').textContent=pct(d.btts_yes);
     renderAdvancedStats(d.advanced_stats); renderFixtureContext(d);
     $('topScores').innerHTML=''; (d.top_scorelines||[]).forEach((s,i)=>{const row=document.createElement('div');row.className='score-row';row.innerHTML=`<span class="score-rank">${i+1}</span><strong>${s.score}</strong><span>${pct(s.probability)}</span>`;$('topScores').appendChild(row);});
-    if($('scoreDistributionNote')) $('scoreDistributionNote').textContent=`3 สกอร์แรกมีความน่าจะเป็นรวม ${pct((d.score_distribution||{}).top3_probability_mass||0)} · จึงควรอ่านร่วมกับ 1X2 และช่วงประตู ไม่ควรยึดสกอร์เดียว`;
+    if($('scoreDistributionNote')) $('scoreDistributionNote').textContent=`ช่วงประตูใช้ probability interval ประมาณ 80% · 3 สกอร์แรกมีความน่าจะเป็นรวม ${pct((d.score_distribution||{}).top3_probability_mass||0)} · ไม่ควรยึดสกอร์เดียว`;
     $('evidence').innerHTML=''; (d.statistical_evidence||[]).forEach(item=>{const box=document.createElement('div');box.className='evidence-item';box.innerHTML=`<strong></strong><span></span>`;box.querySelector('strong').textContent=item.title;box.querySelector('span').textContent=item.text;$('evidence').appendChild(box);});
     $('reasons').innerHTML=`<li>Elo: ${home} ${d.home_elo} · ${away} ${d.away_elo}</li><li>ให้น้ำหนักฤดูกาลล่าสุดมากกว่าข้อมูลเก่า และไม่ใช้ราคาต่อรองเป็น input หลัก</li>`;
     $('modelNote').textContent='ประตูคาดการณ์เป็นค่าจากโมเดล ไม่ใช่ shot-location xG';

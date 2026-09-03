@@ -14,6 +14,7 @@ CACHE_DIR.mkdir(exist_ok=True)
 
 FIXTURES_URL = "https://www.football-data.co.uk/matches/resources/fixtures.csv"
 ESPN_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
+LONDON = ZoneInfo("Europe/London")
 
 TEAM_ALIASES = {
     "afc bournemouth": "AFC Bournemouth", "bournemouth": "AFC Bournemouth",
@@ -32,16 +33,17 @@ TEAM_ALIASES = {
     "leeds": "Leeds United", "leeds united": "Leeds United", "leeds united fc": "Leeds United",
     "liverpool": "Liverpool", "liverpool fc": "Liverpool",
     "man city": "Manchester City", "manchester city": "Manchester City", "manchester city fc": "Manchester City",
-    "man united": "Manchester United", "manchester united": "Manchester United", "manchester united fc": "Manchester United",
-    "newcastle": "Newcastle United", "newcastle united": "Newcastle United", "newcastle united fc": "Newcastle United",
-    "nott m forest": "Nottingham Forest", "nottingham forest": "Nottingham Forest", "nottingham forest fc": "Nottingham Forest",
+    "man utd": "Manchester United", "man united": "Manchester United", "manchester united": "Manchester United", "manchester united fc": "Manchester United",
+    "newcastle": "Newcastle United", "newcastle utd": "Newcastle United", "newcastle united": "Newcastle United", "newcastle united fc": "Newcastle United",
+    "nott m forest": "Nottingham Forest", "nott'm forest": "Nottingham Forest", "nottingham forest": "Nottingham Forest", "nottingham forest fc": "Nottingham Forest",
     "sunderland": "Sunderland", "sunderland afc": "Sunderland",
-    "tottenham": "Tottenham Hotspur", "tottenham hotspur": "Tottenham Hotspur", "tottenham hotspur fc": "Tottenham Hotspur",
+    "tottenham": "Tottenham Hotspur", "tottenham hotspur": "Tottenham Hotspur", "tottenham hotspur fc": "Tottenham Hotspur", "spurs": "Tottenham Hotspur",
 }
 
 
 def _name_key(x):
     x = str(x or "").strip().lower().replace("&", " and ")
+    x = re.sub(r"\b(fc|afc|football club)\b", " ", x)
     x = re.sub(r"[^a-z0-9]+", " ", x)
     return re.sub(r"\s+", " ", x).strip()
 
@@ -61,13 +63,12 @@ def slug(x):
 
 
 class FixtureEngine:
-    """Future fixture source separated from historical result data.
+    """Upcoming Premier League fixture engine.
 
-    Provider order:
-    1) Football-Data weekly fixtures.csv (E0)
-    2) ESPN public EPL scoreboard as a no-key fallback
-
-    No bookmaker odds are returned or used by the model.
+    Historical match results stay in FootballDataEngine. This component only
+    discovers future fixtures. It merges two no-key sources and deliberately
+    queries ESPN day-by-day because the public scoreboard endpoint is more
+    reliable for a single YYYYMMDD than a multi-day range.
     """
 
     def __init__(self, refresh_seconds=1800, horizon_days=21):
@@ -77,9 +78,14 @@ class FixtureEngine:
         self.last_refresh = None
         self.errors = []
         self.provider = None
+        self.provider_counts = {}
 
     def _cache_path(self):
         return CACHE_DIR / "fixtures_latest.csv"
+
+    @staticmethod
+    def _today_london():
+        return datetime.now(timezone.utc).astimezone(LONDON).date()
 
     def _football_data(self):
         cache = self._cache_path()
@@ -87,10 +93,11 @@ class FixtureEngine:
         if use_cache:
             text = cache.read_text(encoding="utf-8", errors="ignore")
         else:
-            r = requests.get(FIXTURES_URL, timeout=15, headers={"User-Agent": "Fooball/0.4.5"})
+            r = requests.get(FIXTURES_URL, timeout=15, headers={"User-Agent": "Fooball/0.4.7"})
             r.raise_for_status()
             text = r.text
             cache.write_text(text, encoding="utf-8")
+
         df = pd.read_csv(io.StringIO(text))
         if "Div" in df.columns:
             df = df[df["Div"].astype(str).str.upper() == "E0"]
@@ -98,23 +105,24 @@ class FixtureEngine:
         if not required.issubset(df.columns):
             raise ValueError("fixtures.csv ไม่มีคอลัมน์ Date/HomeTeam/AwayTeam")
 
-        london = ZoneInfo("Europe/London")
         out = []
-        for _, r in df.iterrows():
-            dt = pd.to_datetime(r.get("Date"), dayfirst=True, errors="coerce")
+        for _, row in df.iterrows():
+            dt = pd.to_datetime(row.get("Date"), dayfirst=True, errors="coerce")
             if pd.isna(dt):
                 continue
             date_str = dt.date().isoformat()
-            time_str = str(r.get("Time", "")).strip()
             kickoff_utc = None
+            time_str = str(row.get("Time", "")).strip()
             if time_str and time_str.lower() != "nan":
                 try:
                     hh, mm = [int(v) for v in time_str.split(":")[:2]]
-                    local_dt = datetime(dt.year, dt.month, dt.day, hh, mm, tzinfo=london)
+                    local_dt = datetime(dt.year, dt.month, dt.day, hh, mm, tzinfo=LONDON)
                     kickoff_utc = local_dt.astimezone(timezone.utc).isoformat()
                 except Exception:
-                    kickoff_utc = None
-            home, away = canonical_team(r.get("HomeTeam")), canonical_team(r.get("AwayTeam"))
+                    pass
+            home, away = canonical_team(row.get("HomeTeam")), canonical_team(row.get("AwayTeam"))
+            if not home or not away:
+                continue
             out.append({
                 "fixture_id": f"fd-e0-{date_str}-{slug(home)}-{slug(away)}",
                 "date": date_str,
@@ -124,19 +132,18 @@ class FixtureEngine:
                 "competition": "Premier League",
                 "source": "Football-Data Fixtures",
             })
-        if not out:
-            raise ValueError("ไม่พบ Premier League fixtures ใน fixtures.csv")
         return out
 
-    def _espn(self):
-        today = datetime.now(timezone.utc).date()
-        end = today + timedelta(days=self.horizon_days)
-        dates = f"{today.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}"
-        r = requests.get(ESPN_URL, params={"dates": dates, "limit": 100}, timeout=15,
-                         headers={"User-Agent": "Fooball/0.4.5"})
+    def _espn_day(self, day):
+        dates = day.strftime("%Y%m%d")
+        r = requests.get(
+            ESPN_URL,
+            params={"dates": dates, "limit": 100},
+            timeout=12,
+            headers={"User-Agent": "Fooball/0.4.7"},
+        )
         r.raise_for_status()
         data = r.json()
-        london = ZoneInfo("Europe/London")
         out = []
         for ev in data.get("events", []):
             comps = ev.get("competitions") or []
@@ -148,14 +155,16 @@ class FixtureEngine:
             away_obj = next((c for c in competitors if c.get("homeAway") == "away"), None)
             if not home_obj or not away_obj:
                 continue
-            home = canonical_team((home_obj.get("team") or {}).get("displayName") or (home_obj.get("team") or {}).get("shortDisplayName") or "")
-            away = canonical_team((away_obj.get("team") or {}).get("displayName") or (away_obj.get("team") or {}).get("shortDisplayName") or "")
+            hteam = home_obj.get("team") or {}
+            ateam = away_obj.get("team") or {}
+            home = canonical_team(hteam.get("displayName") or hteam.get("shortDisplayName") or hteam.get("name") or "")
+            away = canonical_team(ateam.get("displayName") or ateam.get("shortDisplayName") or ateam.get("name") or "")
             iso = ev.get("date") or comp.get("date")
-            if not iso:
+            if not home or not away or not iso:
                 continue
             try:
-                kdt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-                date_str = kdt.astimezone(london).date().isoformat()
+                kdt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+                date_str = kdt.astimezone(LONDON).date().isoformat()
                 kickoff_utc = kdt.astimezone(timezone.utc).isoformat()
             except Exception:
                 continue
@@ -166,25 +175,45 @@ class FixtureEngine:
                 "home_team": home,
                 "away_team": away,
                 "competition": "Premier League",
-                "source": "ESPN Schedule fallback",
+                "source": "ESPN Schedule",
             })
-        if not out:
-            raise ValueError("ESPN fallback ไม่คืน Premier League fixtures")
         return out
+
+    def _espn(self):
+        start = self._today_london()
+        rows = []
+        day_errors = []
+        # Query every date explicitly. This is intentionally conservative and
+        # avoids depending on undocumented range semantics of the public API.
+        for offset in range(self.horizon_days + 1):
+            day = start + timedelta(days=offset)
+            try:
+                rows.extend(self._espn_day(day))
+            except Exception as exc:
+                day_errors.append(f"{day.isoformat()}: {exc}")
+        if day_errors and not rows:
+            raise ValueError("; ".join(day_errors[:3]))
+        if day_errors:
+            self.errors.extend([f"ESPN day {e}" for e in day_errors[:3]])
+        return rows
 
     def _dedupe(self, rows):
         merged = {}
         for f in rows:
             key = (f.get("date"), team_key(f.get("home_team")), team_key(f.get("away_team")))
+            if not all(key):
+                continue
             if key not in merged:
-                merged[key] = f
-            else:
-                # Prefer a row with kickoff time; keep source provenance.
-                cur = merged[key]
-                if not cur.get("kickoff_utc") and f.get("kickoff_utc"):
-                    cur["kickoff_utc"] = f.get("kickoff_utc")
-                sources = set(str(cur.get("source", "")).split(" + ")) | set(str(f.get("source", "")).split(" + "))
-                cur["source"] = " + ".join(sorted(x for x in sources if x))
+                merged[key] = dict(f)
+                continue
+            cur = merged[key]
+            if not cur.get("kickoff_utc") and f.get("kickoff_utc"):
+                cur["kickoff_utc"] = f.get("kickoff_utc")
+            # Prefer ESPN's event id when it exists, while retaining provenance.
+            if str(f.get("fixture_id", "")).startswith("espn-"):
+                cur["fixture_id"] = f.get("fixture_id")
+            sources = set(str(cur.get("source", "")).split(" + ")) | set(str(f.get("source", "")).split(" + "))
+            cur["source"] = " + ".join(sorted(x for x in sources if x))
         return list(merged.values())
 
     def refresh(self, force=False):
@@ -193,23 +222,25 @@ class FixtureEngine:
         self.errors = []
         rows = []
         providers = []
+        self.provider_counts = {}
 
-        # Important: query both providers. A provider can be reachable yet still
-        # have an incomplete/stale fixture list, so success from one source must
-        # not prevent the other source from contributing missing fixtures.
         try:
             fd = self._football_data()
             rows.extend(fd)
-            providers.append("Football-Data Fixtures")
+            self.provider_counts["Football-Data Fixtures"] = len(fd)
+            if fd:
+                providers.append("Football-Data Fixtures")
         except Exception as exc:
             self.errors.append(f"Football-Data Fixtures: {exc}")
 
         try:
             espn = self._espn()
             rows.extend(espn)
-            providers.append("ESPN Schedule fallback")
+            self.provider_counts["ESPN Schedule"] = len(espn)
+            if espn:
+                providers.append("ESPN Schedule")
         except Exception as exc:
-            self.errors.append(f"ESPN fallback: {exc}")
+            self.errors.append(f"ESPN Schedule: {exc}")
 
         self.fixtures = self._dedupe(rows)
         self.provider = " + ".join(providers) if providers else None
@@ -217,7 +248,7 @@ class FixtureEngine:
 
     def find(self, home_team, away_team):
         self.refresh()
-        today = datetime.now(timezone.utc).date()
+        today = self._today_london()
         hk, ak = team_key(home_team), team_key(away_team)
         rows = [f for f in self.fixtures if team_key(f.get("home_team")) == hk and team_key(f.get("away_team")) == ak]
         rows = [f for f in rows if datetime.fromisoformat(f["date"]).date() >= today]
@@ -226,7 +257,7 @@ class FixtureEngine:
 
     def upcoming(self, days=10):
         self.refresh()
-        today = datetime.now(timezone.utc).date()
+        today = self._today_london()
         end = today + timedelta(days=days)
         rows = [f for f in self.fixtures if today <= datetime.fromisoformat(f["date"]).date() <= end]
         rows.sort(key=lambda f: (f["date"], f.get("kickoff_utc") or "", f["home_team"]))
@@ -239,10 +270,14 @@ class FixtureEngine:
             src = f.get("source") or "unknown"
             source_counts[src] = source_counts.get(src, 0) + 1
         return {
+            "version": "0.4.7",
             "provider": self.provider,
             "fixture_count": len(self.fixtures),
-            "source_counts": source_counts,
+            "provider_counts": self.provider_counts,
+            "source_counts_after_merge": source_counts,
+            "next_10_days_count": len(self.upcoming(10)),
             "last_refresh_unix": self.last_refresh,
             "refresh_interval_seconds": self.refresh_seconds,
-            "errors": self.errors[-5:],
+            "horizon_days": self.horizon_days,
+            "errors": self.errors[-8:],
         }

@@ -1,26 +1,36 @@
-# Fooball v0.4.6 — Prediction Clarity + Fixture Matching
+# Fooball v0.4.7 — Fixture Engine + Probability Range Fix
 
-เวอร์ชันนี้ทำ 2 งานตามลำดับก่อนขยับไปโมเดล feature-enhanced:
+รอบนี้แก้ 2 จุดต่อจาก v0.4.6 โดยไม่เปลี่ยนแกนโมเดลหลัก
 
-1. **แก้การตีความสกอร์ 2–1 ซ้ำบ่อย** — หน้าเว็บไม่ยก exact score เป็นคำทำนายหลักอีกต่อไป แต่แสดงช่วงประตูของแต่ละทีม (credible goal band), 1X2, expected goals และให้ exact score เป็นเพียงอันดับความน่าจะเป็น พร้อมแสดง probability mass ของ Top 3.
-2. **ทำ Fixture Engine ให้ทนต่อข้อมูลไม่ครบ** — query ทั้ง Football-Data Fixtures และ ESPN แล้ว merge/dedupe แทนการหยุดเมื่อ provider แรกตอบสำเร็จ รวมทั้ง canonical team aliases เช่น Man City / Manchester City FC / Manchester City.
-3. **Upcoming Fixtures Dashboard** — หน้าเว็บแสดงโปรแกรม 10 วันข้างหน้าที่ Fixture Engine มองเห็น และกดคู่เพื่อเติม dropdown ได้ทันที.
+1. **Fixture Engine แข็งแรงขึ้น**
+   - Football-Data fixtures.csv ยังเป็นหนึ่งในแหล่งโปรแกรม
+   - ESPN schedule ถูก query **ทีละวัน** ตลอด horizon 21 วัน แทนการพึ่ง date-range query เดียว
+   - merge + dedupe สองแหล่ง และ normalize ชื่อทีม เช่น Man City / Manchester City FC
+   - ใช้วันปัจจุบันตาม Europe/London สำหรับโปรแกรม EPL
+   - เพิ่ม `/api/fixture-debug?force=true` เพื่อดู provider, error และ fixtures ที่ backend มองเห็นจริง
+
+2. **ช่วงประตูไม่ใช้ 68% shortest interval แล้ว**
+   - เปลี่ยนเป็น discrete equal-tail interval เป้าหมายประมาณ **80%**
+   - ตัวอย่าง lambda ใกล้ 1.42 / 1.73 จะอ่านเป็นประมาณ `0–3 | 0–3` แทน `0–2 | 0–2`
+   - ช่วงนี้เป็น “ช่วงที่มีความเป็นไปได้หลัก” ไม่ใช่การรับประกันว่าผลต้องอยู่ในช่วงนั้น
+   - exact score ยังคงแสดงเป็น Top 3 พร้อม probability เพื่อไม่ให้ผู้ใช้ยึดสกอร์เดียว
 
 ## Deploy
-อัปโหลดไฟล์ทั้งหมดในโฟลเดอร์นี้ไป GitHub root แล้ว commit เช่น:
 
-`Upgrade Fooball v0.4.6 prediction clarity`
+อัปไฟล์ทั้งหมดใน ZIP ทับไฟล์เดิมที่ GitHub root แล้ว commit เช่น:
 
-Render ใช้ค่าเดิม:
-- Build: `pip install -r requirements.txt`
-- Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+`Upgrade Fooball v0.4.7 fixture probability fix`
+
+Render จะ auto-deploy จาก branch main ตาม setup เดิม
 
 ## หลัง deploy ให้ตรวจ
-- badge/footer เป็น v0.4.6
-- `/api/version` เป็น 0.4.6
-- ส่วน “โปรแกรมพรีเมียร์ลีกถัดไป” มีรายการ fixture ถ้า provider ต้นทางตอบข้อมูล
-- Manchester City vs Coventry City ถ้าถูกพบ จะขึ้น fixture และบันทึก prediction ก่อนแข่ง
-- ผลวิเคราะห์จะแสดงช่วงประตู เช่น `1–3 | 0–1` และ exact score 2–1 เป็นเพียงสกอร์เด่นพร้อมเปอร์เซ็นต์
 
-## Step ถัดไป (v0.4.7)
-ทำ feature experiment/backtest: Shots, SOT, conversion, defensive shot allowance และ form เข้าโมเดลแบบมีการ shrinkage แล้วเปรียบเทียบกับ baseline ด้วย Brier / Log Loss / calibration ก่อนเปิดใช้จริง.
+- Badge และ footer เป็น `v0.4.7`
+- `/health` คืน version `0.4.7`
+- `/api/fixture-status` แสดง `provider_counts`
+- เปิด `/api/fixture-debug?force=true` หากหน้า “โปรแกรมพรีเมียร์ลีกถัดไป” ยังว่าง
+- ช่วงประตูในหน้าผลวิเคราะห์ระบุ `ช่วงประตูหลัก ≈80%`
+
+## Step ถัดไป
+
+เมื่อ Fixture Engine เห็นโปรแกรมอนาคตและสามารถบันทึก prediction ก่อนแข่งได้แล้ว ค่อยไป v0.4.8 เพื่อทำ Feature Experiment + Walk-forward Backtest ก่อนเอา Shots/SOT/Conversion/ฟอร์มเข้าโมเดล production จริง

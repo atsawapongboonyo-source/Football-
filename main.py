@@ -8,7 +8,7 @@ from fixture_engine import FixtureEngine
 from prediction_store import save_prediction, list_predictions, all_predictions
 
 ROOT = Path(__file__).resolve().parent
-VERSION = "0.4.6"
+VERSION = "0.4.7"
 app = FastAPI(title="Fooball", version=VERSION)
 predictor = FooballPredictor()
 fixture_engine = FixtureEngine()
@@ -45,7 +45,7 @@ def health():
         "status": "ok",
         "version": VERSION,
         "frontend_expected": VERSION,
-        "deployment_marker": "prediction-clarity-046",
+        "deployment_marker": "fixture-probability-047",
     }
 
 
@@ -54,8 +54,9 @@ def api_version():
     return {
         "backend": VERSION,
         "frontend_expected": VERSION,
-        "deployment_marker": "prediction-clarity-046",
+        "deployment_marker": "fixture-probability-047",
         "javascript_mode": "inline",
+        "fixture_engine": "multi-source-day-by-day",
     }
 
 
@@ -86,6 +87,18 @@ def upcoming_fixtures(days: int = Query(10, ge=1, le=30)):
         "season": "2026/27",
         "provider": fixture_engine.status().get("provider"),
         "fixtures": fixture_engine.upcoming(days),
+    }
+
+
+@app.get("/api/fixture-debug")
+def fixture_debug(force: bool = False):
+    if force:
+        fixture_engine.refresh(force=True)
+    status = fixture_engine.status()
+    return {
+        "status": status,
+        "next_10_days": fixture_engine.upcoming(10),
+        "sample_all": fixture_engine.fixtures[:20],
     }
 
 

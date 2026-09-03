@@ -255,23 +255,39 @@ class FooballPredictor:
 
 
     @staticmethod
-    def _credible_goal_band(probs, target=0.68):
-        """Smallest contiguous goal interval containing at least target mass."""
-        probs = [float(x) for x in probs]
-        best = None
-        for lo in range(len(probs)):
-            total = 0.0
-            for hi in range(lo, len(probs)):
-                total += probs[hi]
-                if total >= target:
-                    cand = (hi-lo, -total, lo, hi, total)
-                    if best is None or cand < best:
-                        best = cand
-                    break
-        if best is None:
-            return {"low": 0, "high": len(probs)-1, "probability": sum(probs)}
-        _, _, lo, hi, total = best
-        return {"low": int(lo), "high": int(hi), "probability": float(total)}
+    def _goal_probability_interval(probs, coverage=0.80):
+        """Discrete equal-tail interval for team goals.
+
+        The previous 68% shortest interval often rendered 0–2 for many different
+        lambdas. An 80% equal-tail interval is intentionally broader and easier
+        to read as a plausible range rather than a pseudo exact-score forecast.
+        """
+        probs = [max(0.0, float(x)) for x in probs]
+        total = sum(probs) or 1.0
+        probs = [x / total for x in probs]
+        tail = (1.0 - coverage) / 2.0
+        cumulative = 0.0
+        lo = 0
+        for i, p in enumerate(probs):
+            cumulative += p
+            if cumulative >= tail:
+                lo = i
+                break
+        cumulative = 0.0
+        hi = len(probs) - 1
+        for i, p in enumerate(probs):
+            cumulative += p
+            if cumulative >= 1.0 - tail:
+                hi = i
+                break
+        mass = sum(probs[lo:hi+1])
+        return {
+            "low": int(lo),
+            "high": int(hi),
+            "probability": float(mass),
+            "target_coverage": float(coverage),
+            "method": "equal_tail_discrete",
+        }
 
     def predict(self, home, away):
         self._ensure_model()
@@ -307,15 +323,15 @@ class FooballPredictor:
         top=[{"score":f"{i}–{j}","probability":p} for p,i,j in flat[:3]]
         home_goal_probs = mat.sum(axis=1).tolist()
         away_goal_probs = mat.sum(axis=0).tolist()
-        home_band = self._credible_goal_band(home_goal_probs, .68)
-        away_band = self._credible_goal_band(away_goal_probs, .68)
+        home_band = self._goal_probability_interval(home_goal_probs, .80)
+        away_band = self._goal_probability_interval(away_goal_probs, .80)
         top3_mass = float(sum(x["probability"] for x in top))
 
         probs=[(home,home_win),("เสมอ",draw),(away,away_win)]
         view=max(probs,key=lambda x:x[1])[0]
 
         return {
-            "api_version":"0.4.6",
+            "api_version":"0.4.7",
             "season":"2026/27",
             "home_team":home,"away_team":away,
             "home_win":home_win,"draw":draw,"away_win":away_win,
@@ -329,7 +345,8 @@ class FooballPredictor:
                 "home_goal_band": home_band,
                 "away_goal_band": away_band,
                 "top3_probability_mass": top3_mass,
-                "note": "สกอร์อันดับ 1 คือสกอร์เดี่ยวที่มีโอกาสมากที่สุด ไม่ได้หมายความว่าโมเดลมั่นใจว่าสกอร์นั้นจะเกิด",
+                "interval_coverage": 0.80,
+                "note": "ช่วงประตูเป็น equal-tail probability interval ประมาณ 80%; สกอร์อันดับ 1 เป็นเพียงสกอร์เดี่ยวที่มีโอกาสสูงสุด ไม่ใช่คำยืนยันผล",
             },
             "model_view": "เกมมีแนวโน้มสูสี" if view=="เสมอ" else f"{view} ได้เปรียบ",
             "home_elo":round(self.elo.get(home,1500),1),
@@ -344,5 +361,5 @@ class FooballPredictor:
     def status(self):
         self._ensure_model()
         s=self.engine.status()
-        s.update({"api_version":"0.4.6","teams":len(self.current_teams)})
+        s.update({"api_version":"0.4.7","teams":len(self.current_teams)})
         return s
