@@ -55,6 +55,7 @@ class FooballPredictor:
         self.away_avg = 1.22
         self.matches_loaded = 0
         self.current_matches_loaded = 0
+        self.matches = pd.DataFrame()
 
     def _name(self, x):
         return FD_NAMES.get(str(x).strip(), str(x).strip())
@@ -99,6 +100,7 @@ class FooballPredictor:
         allm["FTAG"] = pd.to_numeric(allm["FTAG"], errors="coerce")
         allm = allm.dropna(subset=["FTHG","FTAG"])
         self.matches_loaded = len(allm)
+        self.matches = allm.copy()
 
         w = allm["weight"].to_numpy(float)
         self.home_avg = float(np.average(allm["FTHG"], weights=w))
@@ -208,6 +210,128 @@ class FooballPredictor:
     def _poisson(k, lam):
         return math.exp(-lam) * (lam**k) / math.factorial(k)
 
+    def _team_evidence(self, home, away):
+        if self.matches.empty:
+            return []
+
+        m = self.matches.copy()
+
+        def recent_home(team, n=18):
+            x = m[m.HomeTeam == team].tail(n)
+            if x.empty:
+                return None
+            wins = int((x.FTHG > x.FTAG).sum())
+            draws = int((x.FTHG == x.FTAG).sum())
+            losses = int((x.FTHG < x.FTAG).sum())
+            return {
+                "matches": len(x),
+                "wins": wins, "draws": draws, "losses": losses,
+                "win_rate": wins/len(x),
+                "gf": float(x.FTHG.mean()),
+                "ga": float(x.FTAG.mean()),
+                "over25": float(((x.FTHG+x.FTAG) >= 3).mean()),
+                "btts": float(((x.FTHG > 0) & (x.FTAG > 0)).mean()),
+            }
+
+        def recent_away(team, n=18):
+            x = m[m.AwayTeam == team].tail(n)
+            if x.empty:
+                return None
+            wins = int((x.FTAG > x.FTHG).sum())
+            draws = int((x.FTAG == x.FTHG).sum())
+            losses = int((x.FTAG < x.FTHG).sum())
+            return {
+                "matches": len(x),
+                "wins": wins, "draws": draws, "losses": losses,
+                "win_rate": wins/len(x),
+                "gf": float(x.FTAG.mean()),
+                "ga": float(x.FTHG.mean()),
+                "over25": float(((x.FTHG+x.FTAG) >= 3).mean()),
+                "btts": float(((x.FTHG > 0) & (x.FTAG > 0)).mean()),
+            }
+
+        def last_form(team, n=5):
+            x = m[(m.HomeTeam == team) | (m.AwayTeam == team)].tail(n)
+            if x.empty:
+                return None
+            w=d=l=0
+            gf=ga=0
+            for _, r in x.iterrows():
+                is_home = r.HomeTeam == team
+                tgf = r.FTHG if is_home else r.FTAG
+                tga = r.FTAG if is_home else r.FTHG
+                gf += tgf; ga += tga
+                if tgf > tga: w += 1
+                elif tgf == tga: d += 1
+                else: l += 1
+            return {"matches":len(x),"wins":w,"draws":d,"losses":l,
+                    "gf":float(gf/len(x)),"ga":float(ga/len(x))}
+
+        def h2h(a, b, n=5):
+            x = m[((m.HomeTeam == a)&(m.AwayTeam == b)) |
+                  ((m.HomeTeam == b)&(m.AwayTeam == a))].tail(n)
+            if x.empty:
+                return None
+            aw=dw=bw=0
+            for _, r in x.iterrows():
+                if r.FTHG == r.FTAG:
+                    dw += 1
+                else:
+                    winner = r.HomeTeam if r.FTHG > r.FTAG else r.AwayTeam
+                    if winner == a: aw += 1
+                    elif winner == b: bw += 1
+            return {"matches":len(x), "home_team_wins":aw,
+                    "draws":dw, "away_team_wins":bw}
+
+        hh = recent_home(home)
+        aa = recent_away(away)
+        hf = last_form(home)
+        af = last_form(away)
+        head = h2h(home, away)
+
+        evidence = []
+        if hh:
+            evidence.append({
+                "title": f"ผลงานในบ้านของ {home}",
+                "text": f"ชนะ {hh['wins']} จาก {hh['matches']} นัด ({hh['win_rate']*100:.0f}%) · ยิงเฉลี่ย {hh['gf']:.2f} · เสียเฉลี่ย {hh['ga']:.2f} ประตู/นัด"
+            })
+            evidence.append({
+                "title": "แนวโน้มประตูของเจ้าบ้าน",
+                "text": f"สูง 2.5 เกิด {hh['over25']*100:.0f}% · ทั้งสองทีมยิงได้ {hh['btts']*100:.0f}% จาก {hh['matches']} เกมเหย้าล่าสุด"
+            })
+        if aa:
+            evidence.append({
+                "title": f"ผลงานเกมเยือนของ {away}",
+                "text": f"ชนะ {aa['wins']} จาก {aa['matches']} นัด ({aa['win_rate']*100:.0f}%) · ยิงเฉลี่ย {aa['gf']:.2f} · เสียเฉลี่ย {aa['ga']:.2f} ประตู/นัด"
+            })
+            evidence.append({
+                "title": "แนวโน้มประตูของทีมเยือน",
+                "text": f"สูง 2.5 เกิด {aa['over25']*100:.0f}% · ทั้งสองทีมยิงได้ {aa['btts']*100:.0f}% จาก {aa['matches']} เกมเยือนล่าสุด"
+            })
+        if hf:
+            evidence.append({
+                "title": f"ฟอร์ม {hf['matches']} นัดล่าสุดของ {home}",
+                "text": f"ชนะ {hf['wins']} · เสมอ {hf['draws']} · แพ้ {hf['losses']} · ยิงเฉลี่ย {hf['gf']:.2f} ประตู/นัด"
+            })
+        if af:
+            evidence.append({
+                "title": f"ฟอร์ม {af['matches']} นัดล่าสุดของ {away}",
+                "text": f"ชนะ {af['wins']} · เสมอ {af['draws']} · แพ้ {af['losses']} · ยิงเฉลี่ย {af['gf']:.2f} ประตู/นัด"
+            })
+        if head and head["matches"] >= 2:
+            evidence.append({
+                "title": "สถิติการพบกันล่าสุด",
+                "text": f"{home} ชนะ {head['home_team_wins']} · เสมอ {head['draws']} · {away} ชนะ {head['away_team_wins']} จาก {head['matches']} นัด"
+            })
+        if home in PROMOTED or away in PROMOTED:
+            promoted = home if home in PROMOTED else away
+            evidence.append({
+                "title": f"การปรับข้อมูลทีมน้องใหม่: {promoted}",
+                "text": "ใช้ผลงาน Championship 2025/26 เป็น prior และปรับระดับความแข็งแกร่งก่อนรวมกับผล Premier League 2026/27"
+            })
+
+        return evidence
+
     def predict(self, home, away):
         self._ensure()
         hr = self.rates.get(home, TeamRates())
@@ -249,15 +373,27 @@ class FooballPredictor:
         idx = np.unravel_index(np.argmax(mat), mat.shape)
         score_prob = float(mat[idx])
 
+        flat = []
+        for i in range(max_goals+1):
+            for j in range(max_goals+1):
+                flat.append((float(mat[i,j]), i, j))
+        flat.sort(reverse=True, key=lambda x: x[0])
+        top_scorelines = [
+            {"score": f"{i}–{j}", "probability": prob}
+            for prob, i, j in flat[:3]
+        ]
+
+        statistical_evidence = self._team_evidence(home, away)
+
         reasons = []
         if abs(elo_diff) >= 35:
             stronger = home if elo_diff > 0 else away
-            reasons.append(f"Elo advantage: {stronger}")
-        reasons.append(f"Home advantage baseline: {self.home_avg:.2f} goals")
+            reasons.append(f"{stronger} มีคะแนนความแข็งแกร่ง Elo สูงกว่า")
+        reasons.append(f"โมเดลคำนึงถึงความได้เปรียบจากการเล่นในบ้าน โดยค่าเฉลี่ยประตูเจ้าบ้านในข้อมูลอยู่ที่ {self.home_avg:.2f} ประตู")
         if home in PROMOTED or away in PROMOTED:
-            reasons.append("Promoted-team prior: Championship 2025/26 adjusted to EPL strength")
+            reasons.append("มีทีมน้องใหม่ในคู่นี้ จึงนำผลงาน Championship 2025/26 มาปรับเทียบกับระดับ Premier League")
         if self.current_matches_loaded:
-            reasons.append(f"2026/27 live results included: {self.current_matches_loaded} matches")
+            reasons.append(f"ใช้ผลการแข่งขัน Premier League 2026/27 ที่มีในฐานข้อมูลแล้ว {self.current_matches_loaded} นัด")
 
         return {
             "season":"2026/27",
@@ -274,9 +410,11 @@ class FooballPredictor:
             "btts_yes":btts,
             "most_likely_score":f"{idx[0]}–{idx[1]}",
             "most_likely_score_prob":score_prob,
+            "top_scorelines":top_scorelines,
             "home_elo":round(self.elo.get(home,1500),1),
             "away_elo":round(self.elo.get(away,1500),1),
             "reasons":reasons,
+            "statistical_evidence":statistical_evidence,
             "model":"Recency-weighted Poisson + Dixon-Coles low-score adjustment + Elo + promoted-team prior",
             "data_source":"Football-Data.co.uk; Premier League official team list used for 2026/27 roster",
             "note":"Bookmaker odds are not used as model inputs."

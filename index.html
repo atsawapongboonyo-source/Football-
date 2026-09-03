@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b1115">
   <title>Fooball — Match Intelligence</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=030">
+  <link rel="stylesheet" href="/styles.css?v=031">
 </head>
 <body>
   <main class="wrap">
@@ -15,58 +15,96 @@
         <div class="brand">FOOBALL<span>.</span></div>
         <div class="subbrand">MATCH INTELLIGENCE</div>
       </div>
-      <div class="beta">V0.3</div>
+      <div class="beta">V0.3.2</div>
     </header>
 
     <section class="hero">
       <div class="eyebrow">PREMIER LEAGUE · 2026/27</div>
-      <h1>วิเคราะห์ก่อนเกม<br><span>ด้วยข้อมูลจริง ไม่ใช่ความรู้สึก</span></h1>
-      <p>ข้อมูลย้อนหลังแบบให้น้ำหนักฤดูกาลล่าสุด + Elo + Poisson/Dixon–Coles และ prior สำหรับทีมน้องใหม่</p>
+      <h1>วิเคราะห์ก่อนเกม<br><span>ด้วยข้อมูล ไม่ใช่ความรู้สึก</span></h1>
+      <p>วิเคราะห์จากสถิติย้อนหลังแบบให้น้ำหนักข้อมูลล่าสุด ร่วมกับ Elo, Poisson/Dixon–Coles และโมเดลสำหรับทีมน้องใหม่</p>
     </section>
 
     <section class="panel">
       <label>เจ้าบ้าน</label>
       <select id="homeTeam"></select>
+
       <div class="vs">VS</div>
+
       <label>ทีมเยือน</label>
       <select id="awayTeam"></select>
+
       <button id="analyzeBtn">วิเคราะห์การแข่งขัน</button>
       <div id="status" class="status"></div>
     </section>
 
     <section id="results" class="results hidden">
+      <div class="summary card">
+        <span class="summary-label">มุมมองของโมเดล</span>
+        <h2 id="modelView">–</h2>
+        <div id="summaryLine" class="summary-line"></div>
+      </div>
+
       <div class="matchline">
-        <div><b id="homeName"></b><small>HOME</small></div>
+        <div><b id="homeName"></b><small>เจ้าบ้าน</small></div>
         <div class="score"><span id="scorePick">–</span><small id="scoreProb"></small></div>
-        <div><b id="awayName"></b><small>AWAY</small></div>
+        <div><b id="awayName"></b><small>ทีมเยือน</small></div>
       </div>
 
       <div class="card">
         <h2>โอกาส 1X2</h2>
-        <div class="probrow"><span>เจ้าบ้าน</span><b id="homeWin"></b></div>
+        <div class="probrow"><span>เจ้าบ้านชนะ</span><b id="homeWin"></b></div>
         <div class="bar"><i id="homeBar"></i></div>
+
         <div class="probrow"><span>เสมอ</span><b id="draw"></b></div>
         <div class="bar"><i id="drawBar"></i></div>
-        <div class="probrow"><span>ทีมเยือน</span><b id="awayWin"></b></div>
+
+        <div class="probrow"><span>ทีมเยือนชนะ</span><b id="awayWin"></b></div>
         <div class="bar"><i id="awayBar"></i></div>
       </div>
 
       <div class="grid">
-        <div class="metric"><span>Expected Goals</span><b id="xg"></b></div>
-        <div class="metric"><span>Over 2.5</span><b id="over25"></b></div>
-        <div class="metric"><span>Under 2.5</span><b id="under25"></b></div>
-        <div class="metric"><span>BTTS Yes</span><b id="btts"></b></div>
+        <div class="metric">
+          <span>ประตูคาดการณ์</span>
+          <b id="xg"></b>
+          <small>ค่าเฉลี่ยประตูจากโมเดล</small>
+        </div>
+
+        <div class="metric">
+          <span>มากกว่า 2.5 ประตู</span>
+          <b id="over25"></b>
+          <small>อย่างน้อย 3 ประตู</small>
+        </div>
+
+        <div class="metric">
+          <span>น้อยกว่า 2.5 ประตู</span>
+          <b id="under25"></b>
+          <small>ไม่เกิน 2 ประตู</small>
+        </div>
+
+        <div class="metric">
+          <span>ทั้งสองทีมยิงได้</span>
+          <b id="btts"></b>
+          <small>BTTS — Yes</small>
+        </div>
       </div>
 
       <div class="card">
-        <h2>Why?</h2>
+        <h2>สกอร์ที่มีโอกาสมากที่สุด</h2>
+        <div id="topScores" class="top-scores"></div>
+      </div>
+
+      <div class="card">
+        <h2>ผลจากการวิเคราะห์</h2>
+        <div id="evidence" class="evidence"></div>
+        <div class="model-detail-title">ข้อมูลประกอบของโมเดล</div>
         <ul id="reasons"></ul>
         <div id="modelNote" class="fine"></div>
       </div>
     </section>
 
-    <footer>Fooball v0.3 · Statistical model, not betting advice</footer>
+    <footer>Fooball v0.3.2 · แบบจำลองทางสถิติ ไม่ใช่คำแนะนำการเดิมพัน</footer>
   </main>
-  <script src="/app.js?v=030"></script>
+
+  <script src="/app.js?v=031"></script>
 </body>
 </html>
